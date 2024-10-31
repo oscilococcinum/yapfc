@@ -1,45 +1,8 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QMenuBar, QToolBar, QStatusBar, QWidget, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QDialog, QTextEdit, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QMainWindow, QToolBar, QStatusBar, QWidget, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QPoint
-import sys
+from .ccx_tools import Writer, step, nodes, elements
 
-class Writer(QStandardItem):
-    def __init__(self, text="Writer"):
-        super().__init__(text)
-        self.setEditable(False)
-        self.stored_text = ""
-
-    def doubleClicked(self):
-        self.editor = TextEditor(self)
-        self.editor.exec()
-
-    def set_text(self, text):
-        self.stored_text = text
-
-    def get_text(self):
-        return self.stored_text
-
-class TextEditor(QDialog):
-    def __init__(self, writer):
-        super().__init__()
-        self.writer = writer
-        self.setWindowTitle(writer.text())
-        self.setGeometry(100, 100, 400, 300)
-
-        self.layout = QVBoxLayout(self)
-
-        self.text_edit = QTextEdit(self)
-        self.text_edit.setPlainText(writer.get_text())
-        self.layout.addWidget(self.text_edit)
-
-        self.save_button = QPushButton("Save", self)
-        self.save_button.clicked.connect(self.save_text)
-        self.layout.addWidget(self.save_button)
-
-    def save_text(self):
-        text = self.text_edit.toPlainText()
-        self.writer.set_text(text)
-        self.accept()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -152,16 +115,23 @@ class MainWindow(QMainWindow):
             selected_item = self.root_item
 
         menu = QMenu()
-        add_action = QAction("Add Item", self)
-        remove_action = QAction("Remove Item", self)
-        menu.addAction(add_action)
-
+        add_item = QAction("Add Item", self)
+        remove_item = QAction("Remove Item", self)
+        add_step = QAction("Add step", self)
+        remove_step = QAction("Remove step", self)
+        menu.addAction(add_item)
+        menu.addAction(add_step)
         # Only add the remove action if the selected item is not the root item
-        if selected_item != self.root_item:
-            menu.addAction(remove_action)
+        if isinstance(selected_item, Writer) and not (isinstance(selected_item, step)):
+            menu.addAction(remove_item)
+        if isinstance(selected_item, step):
+            menu.addAction(remove_step)
 
-        add_action.triggered.connect(lambda: self.add_item(selected_item))
-        remove_action.triggered.connect(lambda: self.remove_item(selected_item))
+        add_item.triggered.connect(lambda: self.add_item(selected_item))
+        remove_item.triggered.connect(lambda: self.remove_item(selected_item))
+
+        add_step.triggered.connect(lambda: self.add_step(selected_item))
+        remove_step.triggered.connect(lambda: self.remove_step(selected_item))
 
         menu.exec(self.tree_view.viewport().mapToGlobal(position))
 
@@ -177,8 +147,15 @@ class MainWindow(QMainWindow):
         else:
             self.model.removeRow(item.row())
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+    def add_step(self, parent_item):
+        text, ok = QInputDialog.getText(self, "Add Step", "Enter Step name:")
+        if ok and text:
+            new_item = step(text)
+            parent_item.appendRow(new_item)
+
+    def remove_step(self, item):
+        if item.parent():
+            item.parent().removeRow(item.row())
+        else:
+            self.model.removeRow(item.row())
+
