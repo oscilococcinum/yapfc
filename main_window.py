@@ -1,26 +1,35 @@
 from PySide6.QtWidgets import QApplication, QMainWindow, QMenuBar, QToolBar, QStatusBar, QWidget, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QDialog, QTextEdit, QPushButton, QHBoxLayout
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt, QPoint, Signal
+from PySide6.QtCore import Qt, QPoint
 import sys
 
 class Writer(QStandardItem):
     def __init__(self, text="Writer"):
         super().__init__(text)
         self.setEditable(False)
+        self.stored_text = ""
 
     def doubleClicked(self):
-        self.editor = TextEditor(self.text())
+        self.editor = TextEditor(self)
         self.editor.exec()
 
+    def set_text(self, text):
+        self.stored_text = text
+
+    def get_text(self):
+        return self.stored_text
+
 class TextEditor(QDialog):
-    def __init__(self, title):
+    def __init__(self, writer):
         super().__init__()
-        self.setWindowTitle(title)
+        self.writer = writer
+        self.setWindowTitle(writer.text())
         self.setGeometry(100, 100, 400, 300)
 
         self.layout = QVBoxLayout(self)
 
         self.text_edit = QTextEdit(self)
+        self.text_edit.setPlainText(writer.get_text())
         self.layout.addWidget(self.text_edit)
 
         self.save_button = QPushButton("Save", self)
@@ -29,8 +38,7 @@ class TextEditor(QDialog):
 
     def save_text(self):
         text = self.text_edit.toPlainText()
-        with open(f"{self.windowTitle()}.txt", "w") as file:
-            file.write(text)
+        self.writer.set_text(text)
         self.accept()
 
 class MainWindow(QMainWindow):
