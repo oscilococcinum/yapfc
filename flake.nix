@@ -19,6 +19,7 @@
             matplotlib
             pyside6
             pyvista
+            vtk
         ]);
 
         shellHook = ''
