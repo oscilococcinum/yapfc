@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (
         QApplication, QMainWindow, QToolBar, QStatusBar, QWidget,
-        QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog
+        QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog,
+        QFileDialog
         )
 from PySide6.QtGui import (
         QAction, QStandardItemModel, QStandardItem
@@ -9,7 +10,7 @@ from PySide6.QtCore import Qt, QPoint
 from .ccx_tools import Writer, step, nodes, elements
 import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
-from .load import loadStl, polyDataToActor
+from .load import load_file
 
 
 class vtkViewer(QWidget):
@@ -154,8 +155,7 @@ class MainWindow(QMainWindow):
             # File menu
             file_menu = self.menu_bar.addMenu("File")
             open_action = QAction("Open", self)
-            # TODO make it dunamic wiyj pop up window and other formats
-            open_action.triggered.connect(lambda: self.central_widget.AddActor(loadStl("./mesh/Bunny-LowPoly.stl")))
+            open_action.triggered.connect(lambda: self.central_widget.AddActor(load_file(self.open_file_dialog())))
             save_action = QAction("Save", self)
             exit_action = QAction("Exit", self)
             exit_action.triggered.connect(self.close)
@@ -260,6 +260,10 @@ class MainWindow(QMainWindow):
         help_menu()
         tree_view()
 
+    def open_file_dialog(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*);;STL Files (*.stl)", options=options)
+        return file_name
 
     def double_click_on_writer(self, index):
         item = self.model.itemFromIndex(index)
