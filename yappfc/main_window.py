@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QPoint
 from .ccx_tools import Writer, step, nodes, elements
 import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
+from .load import loadStl, polyDataToActor
 
 
 class vtkViewer(QWidget):
@@ -34,12 +35,9 @@ class vtkViewer(QWidget):
 
         # Set background color of the renderer
         self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
-
         self.interactor = self.QVTKRenderWindowInteractor(self)
-
         self.trackball = vtk.vtkInteractorStyleTrackballCamera()
         self.interactor.SetInteractorStyle(self.trackball)
-
         self.interactor.GetRenderWindow().AddRenderer(self.renderer)
         self.interactor.GetRenderWindow().PointSmoothingOn()
         self.interactor.GetRenderWindow().LineSmoothingOn()
@@ -108,6 +106,15 @@ class vtkViewer(QWidget):
         self.renderer.RemoveActor(pvtkActor)
         self.ResetCamera()
 
+    def GetAllActors(self):
+        """Return a list of all vtkActors currently in the renderer."""
+        actors = []
+        num_actors = self.renderer.GetActors().GetNumberOfItems()
+        for i in range(num_actors):
+            actor = self.renderer.GetActors().GetItemAsObject(i)
+            actors.append(actor)
+        return actors
+
     def SetRepresentation(self, aTyp):
         ''' aTyp = 1 - Points
             aTyp = 2 - Wireframe
@@ -143,101 +150,118 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # Set up the main window
-        self.setWindowTitle("yapfc")
-        self.setGeometry(100, 100, 800, 600)
+        def file_menu():
+            # File menu
+            file_menu = self.menu_bar.addMenu("File")
+            open_action = QAction("Open", self)
+            # TODO make it dunamic wiyj pop up window and other formats
+            open_action.triggered.connect(lambda: self.central_widget.AddActor(loadStl("./mesh/Bunny-LowPoly.stl")))
+            save_action = QAction("Save", self)
+            exit_action = QAction("Exit", self)
+            exit_action.triggered.connect(self.close)
+            file_menu.addAction(open_action)
+            file_menu.addAction(save_action)
+            close_action = QAction("Close", self)
+            close_action.triggered.connect(lambda: self.central_widget.RemoveActor(self.central_widget.GetAllActors()[0]))
+            file_menu.addAction(close_action)
+            file_menu.addAction(exit_action)
 
-        # Create the menu bar
-        self.create_menus()
+        def edit_menu():
+            # Edit menu
+            edit_menu = self.menu_bar.addMenu("Edit")
+            undo_action = QAction("Undo", self)
+            redo_action = QAction("Redo", self)
+            edit_menu.addAction(undo_action)
+            edit_menu.addAction(redo_action)
 
-        # Create the toolbars
-        self.create_toolbar()
+        def view_menu():
+            # View menu
+            view_menu = self.menu_bar.addMenu("View")
 
-        # Create the central widget
-        self.central_widget = vtkViewer()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+            wireframe_rep = QAction("Wireframe", self)
+            wireframe_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(2))
+            view_menu.addAction(wireframe_rep)
 
-        # Create the status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
+            points_rep = QAction("Points", self)
+            points_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(1))
+            view_menu.addAction(points_rep)
 
-        # Create the tree view for simulation components
-        self.create_tree_view()
+            surface_rep = QAction("Surface", self)
+            surface_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(3))
+            view_menu.addAction(surface_rep)
 
-    def create_menus(self):
-        self.menu_bar = self.menuBar()
+            surface_edges_rep = QAction("Surface with edges", self)
+            surface_edges_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(4))
+            view_menu.addAction(surface_edges_rep)
 
-        # File menu
-        file_menu = self.menu_bar.addMenu("File")
-        open_action = QAction("Open", self)
-        save_action = QAction("Save", self)
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(open_action)
-        file_menu.addAction(save_action)
-        file_menu.addAction(exit_action)
+        def tools_menu():
+            # Tools menu
+            tools_menu = self.menu_bar.addMenu("Tools")
+            # Add tools actions here
 
-        # Edit menu
-        edit_menu = self.menu_bar.addMenu("Edit")
-        undo_action = QAction("Undo", self)
-        redo_action = QAction("Redo", self)
-        edit_menu.addAction(undo_action)
-        edit_menu.addAction(redo_action)
+        def help_menu():
+            # Help menu
+            help_menu = self.menu_bar.addMenu("Help")
+            about_action = QAction("About", self)
+            help_menu.addAction(about_action)
 
-        # View menu
-        view_menu = self.menu_bar.addMenu("View")
-        # Add view actions here
+        def tree_view():
+            # Create_tree_view
+            # Create a dock widget for the tree view
+            self.dock_widget = QDockWidget("Simulation Components", self)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
 
-        # Tools menu
-        tools_menu = self.menu_bar.addMenu("Tools")
-        # Add tools actions here
+            # Create the tree view
+            self.tree_view = QTreeView()
+            self.dock_widget.setWidget(self.tree_view)
 
-        # Help menu
-        help_menu = self.menu_bar.addMenu("Help")
-        about_action = QAction("About", self)
-        help_menu.addAction(about_action)
+            # Set up a standard item model
+            self.model = QStandardItemModel()
+            self.model.setHorizontalHeaderLabels(["Components"])
+            self.tree_view.setModel(self.model)
 
-    def create_toolbar(self):
-        self.tool_bar = QToolBar("Main Toolbar")
-        self.addToolBar(self.tool_bar)
+            # Add a root item
+            self.root_item = QStandardItem("Model")
+            self.model.appendRow(self.root_item)
 
-        # Add actions to the toolbar
-        open_action = QAction("Open", self)
-        save_action = QAction("Save", self)
-        self.tool_bar.addAction(open_action)
-        self.tool_bar.addAction(save_action)
+            # Add a root writer item
+            self.writer_item = Writer("Writer")
+            self.root_item.appendRow(self.writer_item)
 
-    def create_tree_view(self):
-        # Create a dock widget for the tree view
-        self.dock_widget = QDockWidget("Simulation Components", self)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+            # Connect double-click signal
+            self.tree_view.doubleClicked.connect(self.double_click_on_writer)
 
-        # Create the tree view
-        self.tree_view = QTreeView()
-        self.dock_widget.setWidget(self.tree_view)
+            # Set up context menu
+            self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
-        # Set up a standard item model
-        self.model = QStandardItemModel()
-        self.model.setHorizontalHeaderLabels(["Components"])
-        self.tree_view.setModel(self.model)
+        def main_window():
+            # Set up the main window
+            self.setWindowTitle("yapfc")
+            self.setGeometry(100, 100, 800, 600)
 
-        # Add a root item
-        self.root_item = QStandardItem("Model")
-        self.model.appendRow(self.root_item)
+            # Create the central widget
+            self.central_widget = vtkViewer()
+            self.setCentralWidget(self.central_widget)
+            self.layout = QVBoxLayout(self.central_widget)
 
-        # Add a writer item
-        self.writer_item = Writer("Writer")
-        self.root_item.appendRow(self.writer_item)
+            # Create the status bar
+            self.status_bar = QStatusBar()
+            self.setStatusBar(self.status_bar)
 
-        # Connect double-click signal
-        self.tree_view.doubleClicked.connect(self.on_double_click)
+            # Create_menus
+            self.menu_bar = self.menuBar()
 
-        # Set up context menu
-        self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
+        main_window()
+        file_menu()
+        edit_menu()
+        view_menu()
+        tools_menu()
+        help_menu()
+        tree_view()
 
-    def on_double_click(self, index):
+
+    def double_click_on_writer(self, index):
         item = self.model.itemFromIndex(index)
         if isinstance(item, Writer):
             item.doubleClicked()
