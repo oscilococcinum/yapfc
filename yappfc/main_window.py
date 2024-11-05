@@ -7,10 +7,10 @@ from PySide6.QtGui import (
         QAction, QStandardItemModel, QStandardItem
         )
 from PySide6.QtCore import Qt, QPoint
-from .ccx_tools import Writer, step, nodes, elements
+from .model import Writer, Step
 import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
-from .load import load_file
+from .mesh import load_file
 
 
 class vtkViewer(QWidget):
@@ -280,14 +280,14 @@ class MainWindow(QMainWindow):
         menu = QMenu()
         add_item = QAction("Add Item", self)
         remove_item = QAction("Remove Item", self)
-        add_step = QAction("Add step", self)
-        remove_step = QAction("Remove step", self)
+        add_step = QAction("Add Step", self)
+        remove_step = QAction("Remove Step", self)
         menu.addAction(add_item)
         menu.addAction(add_step)
         # Only add the remove action if the selected item is not the root item
-        if isinstance(selected_item, Writer) and not (isinstance(selected_item, step)):
+        if isinstance(selected_item, Writer) and not (isinstance(selected_item, Step)):
             menu.addAction(remove_item)
-        if isinstance(selected_item, step):
+        if isinstance(selected_item, Step):
             menu.addAction(remove_step)
 
         add_item.triggered.connect(lambda: self.add_item(selected_item))
@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
     def add_step(self, parent_item):
         text, ok = QInputDialog.getText(self, "Add Step", "Enter Step name:")
         if ok and text:
-            new_item = step(text)
+            new_item = Step(text)
             parent_item.appendRow(new_item)
 
     def remove_step(self, item):

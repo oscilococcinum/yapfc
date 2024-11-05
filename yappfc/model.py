@@ -41,27 +41,8 @@ class Writer(QStandardItem):
         return self.stored_text
 
 
-class step(Writer):
+class Step(Writer):
     def __init__(self, text="Step"):
         super().__init__(text)
         self.setEditable(False)
         self.stored_text = "*Step\n*Static, Solver=PaStiX"
-
-
-class nodes(Writer):
-    def __init__(self, text="Nodes"):
-        super().__init__(text)
-        self.setEditable(False)
-        self.stored_text = """
-
-        """
-
-
-class elements(Writer):
-    def __init__(self, text="Elements"):
-        super().__init__(text)
-        self.setEditable(False)
-        self.stored_text = """
-
-        """
-
