@@ -16,18 +16,20 @@ from PySide6.QtGui import (
 from PySide6.QtCore import Qt, QPoint
 from .viewer import vtkViewer
 from .model import Writer, Step
-from .mesh import load_file
+from .mesh import Mesh
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.mesh = None
+
         def file_menu(self):
             # File menu
             self.file_menu = self.menu_bar.addMenu("File")
             self.open_action = QAction("Open", self)
-            self.open_action.triggered.connect(lambda: self.central_widget.AddActor(load_file(self.open_file_dialog())))
+            self.open_action.triggered.connect(lambda: self.central_widget.AddActor(self.open_mesh()))
             self.save_action = QAction("Save", self)
             self.exit_action = QAction("Exit", self)
             self.exit_action.triggered.connect(self.close)
@@ -113,7 +115,7 @@ class MainWindow(QMainWindow):
             self.setGeometry(100, 100, 800, 600)
 
             # Create the central widget
-            self.central_widget = vtkViewer()
+            self.central_widget = vtkViewer(self.mesh)
             self.setCentralWidget(self.central_widget)
             self.layout = QVBoxLayout(self.central_widget)
 
@@ -169,6 +171,11 @@ class MainWindow(QMainWindow):
         remove_step.triggered.connect(lambda: self.remove_step(selected_item))
 
         menu.exec(self.tree_view.viewport().mapToGlobal(position))
+
+    def open_mesh(self):
+        fpath = self.open_file_dialog()
+        self.mesh = Mesh(fpath)
+        return self.mesh.actor
 
     def add_item(self, parent_item):
         text, ok = QInputDialog.getText(self, "Add Item", "Enter item name:")
