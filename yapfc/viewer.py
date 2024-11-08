@@ -1,26 +1,11 @@
 from PySide6.QtWidgets import QWidget
 import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
-import vtkmodules.vtkRenderingOpenGL2
-from vtkmodules.vtkCommonColor import vtkNamedColors
-from vtkmodules.vtkCommonCore import vtkIdTypeArray
-from vtkmodules.vtkCommonDataModel import (
-    vtkSelection,
-    vtkSelectionNode,
-    vtkUnstructuredGrid
-)
-from vtkmodules.vtkFiltersCore import vtkTriangleFilter
-from vtkmodules.vtkFiltersExtraction import vtkExtractSelection
-from vtkmodules.vtkFiltersSources import vtkPlaneSource
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
     vtkActor,
     vtkCellPicker,
     vtkDataSetMapper,
-    vtkPolyDataMapper,
-    vtkRenderWindow,
-    vtkRenderWindowInteractor,
-    vtkRenderer
 )
 
 
@@ -32,8 +17,6 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         self.selected_actor = vtkActor()
 
     def left_button_press_event(self, obj, event):
-        colors = vtkNamedColors()
-
         # Get the location of the click (in window coordinates)
         pos = self.GetInteractor().GetEventPosition()
 
@@ -44,50 +27,17 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         picker.Pick(pos[0], pos[1], 0, self.GetDefaultRenderer())
 
         world_position = picker.GetPickPosition()
-        print(f'Cell id is: {picker.GetCellId()}')
 
         if picker.GetCellId() != -1:
             print(f'Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})')
-
-            ids = vtkIdTypeArray()
-            ids.SetNumberOfComponents(1)
-            ids.InsertNextValue(picker.GetCellId())
-
-            selection_node = vtkSelectionNode()
-            selection_node.SetFieldType(vtkSelectionNode.CELL)
-            selection_node.SetContentType(vtkSelectionNode.INDICES)
-            selection_node.SetSelectionList(ids)
-
-            selection = vtkSelection()
-            selection.AddNode(selection_node)
-
-            extract_selection = vtkExtractSelection()
-            extract_selection.SetInputData(0, self.data)
-            extract_selection.SetInputData(1, selection)
-            extract_selection.Update()
-
-            # In selection
-            selected = vtkUnstructuredGrid()
-            selected.ShallowCopy(extract_selection.GetOutput())
-
-            print(f'Number of points in the selection: {selected.GetNumberOfPoints()}')
-            print(f'Number of cells in the selection : {selected.GetNumberOfCells()}')
-
-            self.selected_mapper.SetInputData(selected)
-            self.selected_actor.SetMapper(self.selected_mapper)
-            self.selected_actor.GetProperty().EdgeVisibilityOn()
-            self.selected_actor.GetProperty().SetColor(colors.GetColor3d('Tomato'))
-
-            self.selected_actor.GetProperty().SetLineWidth(3)
-
-            self.GetInteractor().GetRenderWindow().GetRenderers().GetFirstRenderer().AddActor(self.selected_actor)
+            print(f'Cell id is: {picker.GetCellId()}')
 
         # Forward events
         self.OnLeftButtonDown()
 
 
 class vtkViewer(QWidget):
-    def __init__(self):
+    def __init__(self, mesh):
         super(vtkViewer, self).__init__()
 
         # vtk initialization
@@ -98,17 +48,18 @@ class vtkViewer(QWidget):
         '''1 = Lower Left , 2 = Lower Right'''
         self.ShowEdges = True
 
-        self.SetupRenderer()
+        self.SetupRenderer(mesh)
         self.SetupTrihedron()
 
-    def SetupRenderer(self):
+    def SetupRenderer(self, data):
         self.renderer = vtk.vtkRenderer()
 
         # Set background color of the renderer
         self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
         self.interactor = self.QVTKRenderWindowInteractor(self)
-        self.trackball = vtk.vtkInteractorStyleTrackballCamera()
-        # self.trackball = MouseInteractorStyle(data) TODO somehow get the data from mesh vtkPolyData, and insert as data should work.
+        # self.trackball = vtk.vtkInteractorStyleTrackballCamera()
+        self.trackball = MouseInteractorStyle(data)
+        self.trackball.SetDefaultRenderer(self.renderer)
         self.interactor.SetInteractorStyle(self.trackball)
         self.interactor.GetRenderWindow().AddRenderer(self.renderer)
         self.interactor.GetRenderWindow().PointSmoothingOn()
