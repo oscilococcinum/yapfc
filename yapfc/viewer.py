@@ -10,7 +10,7 @@ from vtkmodules.vtkRenderingCore import (
 
 
 class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
-    def __init__(self, data):
+    def __init__(self, data: vtk.vtkPolyData):
         self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
         self.data = data
         self.selected_mapper = vtkDataSetMapper()
@@ -29,7 +29,8 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         world_position = picker.GetPickPosition()
 
         if picker.GetCellId() != -1:
-            print(f'Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})')
+            print(f'''Pick position is: ({world_position[0]:.6g},
+                  {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Cell id is: {picker.GetCellId()}')
 
         # Forward events
@@ -57,7 +58,6 @@ class vtkViewer(QWidget):
         # Set background color of the renderer
         self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
         self.interactor = self.QVTKRenderWindowInteractor(self)
-        # self.trackball = vtk.vtkInteractorStyleTrackballCamera()
         self.trackball = MouseInteractorStyle(data)
         self.trackball.SetDefaultRenderer(self.renderer)
         self.interactor.SetInteractorStyle(self.trackball)
@@ -107,10 +107,12 @@ class vtkViewer(QWidget):
                 self.om1.SetViewport(0, 0, (200.0 / width), (200.0 / height))
 
             if self.TrihedronPos == 2:  # Position lower Right in the viewport.
-                self.om1.SetViewport(1 - (200.0 / width), 0, 1, (200.0 / height))
+                self.om1.SetViewport(1 - (200.0 / width),
+                                     0, 1, (200.0 / height))
 
     def resizeEvent(self, ev):
-        self.interactor.GetRenderWindow().SetSize(self.size().width(), self.size().height())
+        self.interactor.GetRenderWindow().SetSize(self.size().width(),
+                                                  self.size().height())
         self.ResizeTrihedron(self.size().width(), self.size().height())
 
     def ResetCamera(self):
