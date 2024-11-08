@@ -12,6 +12,7 @@
         nativeBuildInputs = with pkgs; [
           python312
           calculix
+          gmsh
         ] ++ (
         with python312Packages; [
             meshio
@@ -23,7 +24,6 @@
         ]);
 
         shellHook = ''
-          
         '';
         };
     };
