@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QApplication
-from yapfc.main_window import MainWindow
+from yapfc.mainWindow import MainWindow
 import sys
 
 if __name__ == "__main__":
