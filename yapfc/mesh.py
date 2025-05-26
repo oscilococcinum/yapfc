@@ -4,13 +4,11 @@ import meshio
 
 class Mesh():
     def __init__(self, fpath: str) -> None:
-        self.mesh: (vtk.vtkUnstructuredGrid or
-                    vtk.vtkPolyData) = self.LoadMesh(fpath)
+        self.mesh: (vtk.vtkUnstructuredGrid or vtk.vtkPolyData) = self.LoadMesh(fpath)
         self.actor: vtk.vtkActor = self.MapGridToActor(self.mesh)
 
-    def LoadMesh(self, fpath: str) -> (vtk.vtkUnstructuredGrid or
-                                       vtk.vtkPolyData):
-        if fpath.endswith(".msh"):
+    def LoadMesh(self, fpath: str) -> (vtk.vtkUnstructuredGrid or vtk.vtkPolyData):
+        if fpath.endswith(".msh") or fpath.endswith(".mesh"):
             mesh: meshio.mesh = meshio.read(fpath)
 
             vtk_points = vtk.vtkPoints()
@@ -37,8 +35,7 @@ class Mesh():
             grid: vtk.vtkPolyData = reader.GetOutput()
             return grid
 
-    def MapGridToActor(self, grid: (vtk.vtkUnstructuredGrid or
-                                    vtk.vtkPolyData)):
+    def MapGridToActor(self, grid: (vtk.vtkUnstructuredGrid or vtk.vtkPolyData)):
         mapper = vtk.vtkDataSetMapper()
         mapper.SetInputData(grid)
         actor = vtk.vtkActor()

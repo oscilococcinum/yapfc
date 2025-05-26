@@ -15,18 +15,39 @@ from PySide6.QtGui import (
 )
 from PySide6.QtCore import Qt, QPoint
 from .viewer import vtkViewer
-from .model import Writer, Step
+from .model import (
+    CcxWriter, MeshSubWriter, MaterialSubWriter,
+    SectionSubWriter, ConstraintSubWriter, ContactSubWriter,
+    AmplitudeSubWriter, InitialConditionSubWriter, StepSubWriter,
+    Label, AnalysisSubWriter, BoundarySubWriter
+)
 from .mesh import Mesh
 
+
+def list_children(item):
+    children = []
+    for row in range(item.rowCount()):
+        child = item.child(row)
+        children.append(child)
+        children.extend(list_children(child))
+    return children
+
+def list_model_children(model):
+    children = []
+    for row in range(model.rowCount()):
+        item = model.item(row)
+        children.append(item)
+        children.extend(list_children(item))
+    return children
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.components: list[any] = []
         self.mesh = None
 
         def file_menu(self):
-            # File menu
             self.file_menu = self.menu_bar.addMenu("File")
             self.open_action = QAction("Open", self)
             self.open_action.triggered.connect(lambda: self.central_widget.AddActor(self.open_mesh()))
@@ -41,7 +62,6 @@ class MainWindow(QMainWindow):
             self.file_menu.addAction(self.exit_action)
 
         def edit_menu(self):
-            # Edit menu
             self.edit_menu = self.menu_bar.addMenu("Edit")
             self.undo_action = QAction("Undo", self)
             self.redo_action = QAction("Redo", self)
@@ -49,7 +69,6 @@ class MainWindow(QMainWindow):
             self.edit_menu.addAction(self.redo_action)
 
         def view_menu(self):
-            # View menu
             self.view_menu = self.menu_bar.addMenu("View")
 
             self.wireframe_rep = QAction("Wireframe", self)
@@ -69,18 +88,14 @@ class MainWindow(QMainWindow):
             self.view_menu.addAction(self.surface_edges_rep)
 
         def tools_menu(self):
-            # Tools menu
             self.tools_menu = self.menu_bar.addMenu("Tools")
-            # Add tools actions here
 
         def help_menu(self):
-            # Help menu
             self.help_menu = self.menu_bar.addMenu("Help")
             self.about_action = QAction("About", self)
             self.help_menu.addAction(self.about_action)
 
         def tree_view(self):
-            # Create_tree_view
             # Create a dock widget for the tree view
             self.dock_widget = QDockWidget("Simulation Components", self)
             self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
@@ -94,13 +109,32 @@ class MainWindow(QMainWindow):
             self.model.setHorizontalHeaderLabels(["Components"])
             self.tree_view.setModel(self.model)
 
-            # Add a root item
-            self.root_item = QStandardItem("Model")
-            self.model.appendRow(self.root_item)
+            # Add a root writers
+            self.model_item = Label("Model")
+            self.meshes = Label("Meshes")
+            self.materials = Label("Materials")
+            self.sections = Label("Sections")
+            self.constraints = Label("Constraints")
+            self.contacts = Label("Contacts")
+            self.amplitudes = Label("Amplitudes")
+            self.initial_conditions  = Label("Initial Conditions")
+            self.steps = Label("Steps")
+            self.analyses = Label("Analyses")
 
-            # Add a root writer item
-            self.writer_item = Writer("Writer")
-            self.root_item.appendRow(self.writer_item)
+            self.model.appendRow(self.model_item)
+
+            self.model_item.appendRow(self.meshes)
+            self.model_item.appendRow(self.materials)
+            self.model_item.appendRow(self.sections)
+            self.model_item.appendRow(self.constraints)
+            self.model_item.appendRow(self.contacts)
+            self.model_item.appendRow(self.amplitudes)
+            self.model_item.appendRow(self.initial_conditions)
+            self.model_item.appendRow(self.steps)
+
+            self.model.appendRow(self.analyses)
+
+            self.tree_view.expandAll()
 
             # Connect double-click signal
             self.tree_view.doubleClicked.connect(self.double_click_on_writer)
@@ -110,7 +144,6 @@ class MainWindow(QMainWindow):
             self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
         def main_window(self):
-            # Set up the main window
             self.setWindowTitle("yapfc")
             self.setGeometry(100, 100, 800, 600)
 
@@ -136,12 +169,12 @@ class MainWindow(QMainWindow):
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*);;STL Files (*.stl)", options=options)
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*);;STL Files (*.stl);;Mesh Files (*.mesh);;Msh Files (*.msh)", options=options)
         return file_name
 
     def double_click_on_writer(self, index):
         item = self.model.itemFromIndex(index)
-        if isinstance(item, Writer):
+        if isinstance(item, CcxWriter):
             item.doubleClicked()
 
     def open_context_menu(self, position: QPoint):
@@ -152,23 +185,48 @@ class MainWindow(QMainWindow):
             selected_item = self.root_item
 
         menu = QMenu()
-        add_item = QAction("Add Item", self)
-        remove_item = QAction("Remove Item", self)
-        add_step = QAction("Add Step", self)
-        remove_step = QAction("Remove Step", self)
-        menu.addAction(add_item)
-        menu.addAction(add_step)
-        # Only add the remove action if the selected item is not the root item
-        if isinstance(selected_item, Writer) and not (isinstance(selected_item, Step)):
-            menu.addAction(remove_item)
-        if isinstance(selected_item, Step):
-            menu.addAction(remove_step)
+        addItem = QAction("Add Item", self)
+        addBoundary = QAction("Add Boundary", self)
+        removeItem = QAction("Remove Item", self)
+        runAnalysis = QAction("Run Analysis", self)
 
-        add_item.triggered.connect(lambda: self.add_item(selected_item))
-        remove_item.triggered.connect(lambda: self.remove_item(selected_item))
+        match selected_item.getTextLabel():
+            case "Meshes":
+                menu.addAction(addItem)
+            case "Materials":
+                menu.addAction(addItem)
+            case "Sections":
+                menu.addAction(addItem)
+            case "Contacts":
+                menu.addAction(addItem)
+            case "Initial Conditions":
+                menu.addAction(addItem)
+            case "Steps":
+                menu.addAction(addItem)
+            case "Analyses":
+                menu.addAction(addItem)
 
-        add_step.triggered.connect(lambda: self.add_step(selected_item))
-        remove_step.triggered.connect(lambda: self.remove_step(selected_item))
+            case "Mesh":
+                menu.addAction(removeItem)
+            case "Material":
+                menu.addAction(removeItem)
+            case "Section":
+                menu.addAction(removeItem)
+            case "Contact":
+                menu.addAction(removeItem)
+            case "Initial Condition":
+                menu.addAction(removeItem)
+            case "Step":
+                 menu.addAction(removeItem)
+                 menu.addAction(addBoundary)
+            case "Analysis":
+                menu.addAction(removeItem)
+                menu.addAction(runAnalysis)
+
+        addItem.triggered.connect(lambda: self.addItem(selected_item))
+        addBoundary.triggered.connect(lambda: self.addBoundary(selected_item))
+        removeItem.triggered.connect(lambda: self.removeItem(selected_item))
+        runAnalysis.triggered.connect(lambda: self.runAnalysis())
 
         menu.exec(self.tree_view.viewport().mapToGlobal(position))
 
@@ -177,26 +235,44 @@ class MainWindow(QMainWindow):
         self.mesh = Mesh(fpath)
         return self.mesh.actor
 
-    def add_item(self, parent_item):
-        text, ok = QInputDialog.getText(self, "Add Item", "Enter item name:")
+    def addItem(self, parent_item):
+        if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
+        else: nextIndex: int = 0
+        parent_class: str = parent_item.getTextLabel()
+        text, ok = QInputDialog.getText(self, f"Add {parent_class}", "Enter item name:")
         if ok and text:
-            new_item = Writer(text)
+            match parent_class:
+                case "Meshes": new_item = MeshSubWriter(text)
+                case "Materials": new_item = MaterialSubWriter(text)
+                case "Sections": new_item = SectionSubWriter(text)
+                case "Constraints": new_item = ConstraintSubWriter(text)
+                case "Contacts": new_item = ContactSubWriter(text)
+                case "Amplitudes": new_item = AmplitudeSubWriter(text)
+                case "Initial Conditions": new_item = InitialConditionSubWriter(text)
+                case "Steps": new_item = StepSubWriter(text)
+                case "Analyses": new_item = AnalysisSubWriter(text)
+
+            parent_item.appendRow(new_item)
+            if not isinstance(new_item, AnalysisSubWriter):
+                self.components.append(new_item)
+
+    def addBoundary(self, parent_item: QStandardItem):
+        if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
+        else: nextIndex: int = 0
+        text, ok = QInputDialog.getText(self, "Add Boundary", "Enter item name:", text=f"Boundary{nextIndex}")
+        if ok and text:
+            new_item = BoundarySubWriter(text)
             parent_item.appendRow(new_item)
 
-    def remove_item(self, item):
+    def removeItem(self, item):
         if item.parent():
             item.parent().removeRow(item.row())
+            self.components.remove(item)
         else:
             self.model.removeRow(item.row())
+            self.components.remove(item)
 
-    def add_step(self, parent_item):
-        text, ok = QInputDialog.getText(self, "Add Step", "Enter Step name:")
-        if ok and text:
-            new_item = Step(text)
-            parent_item.appendRow(new_item)
-
-    def remove_step(self, item):
-        if item.parent():
-            item.parent().removeRow(item.row())
-        else:
-            self.model.removeRow(item.row())
+    def runAnalysis(self):
+        comp: CcxWriter
+        for comp in self.components:
+            print(comp.get_text())
