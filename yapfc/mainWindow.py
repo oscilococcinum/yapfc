@@ -167,10 +167,19 @@ class MainWindow(QMainWindow):
         else:
             selected_item = self.root_item
 
+        selected_item_class: str = selected_item.getTextLabel()
+        if selected_item_class.endswith("ses"):
+            selected_item_class = selected_item_class.removesuffix("es")
+            selected_item_class = selected_item_class + "is"
+        elif selected_item_class.endswith("es"):
+            selected_item_class = selected_item_class.removesuffix("es")
+        elif selected_item_class.endswith("s"):
+            selected_item_class = selected_item_class.removesuffix("s")
+
         menu = QMenu()
-        addItem = QAction("Add Item", self)
-        addBoundary = QAction("Add Boundary", self)
-        removeItem = QAction("Remove Item", self)
+        addItem = QAction(f"Add {selected_item_class}", self)
+        addBoundary = QAction(f"Add {selected_item_class}", self)
+        removeItem = QAction(f"Remove {selected_item_class}", self)
         runAnalysis = QAction("Run Analysis", self)
         showResults = QAction("Show Results", self)
 
