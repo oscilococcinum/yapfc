@@ -16,7 +16,7 @@ class Mesh():
                 vtk_points.InsertNextPoint(i)
 
             # Asummes only tetra elements
-            cells: mesh.cells_dict = mesh.cells_dict["tetra"]
+            cells = mesh.cells_dict["tetra"]
             vtk_cells = vtk.vtkCellArray()
             for cell in cells:
                 tetra = vtk.vtkTetra()

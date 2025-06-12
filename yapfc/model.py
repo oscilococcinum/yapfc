@@ -1,6 +1,5 @@
 from PySide6.QtWidgets import QVBoxLayout, QDialog, QTextEdit, QPushButton
 from PySide6.QtGui import QStandardItem
-import subprocess
 
 
 class TextEditor(QDialog):
@@ -129,25 +128,25 @@ class ConstraintSubWriter(CcxWriter):
     def __init__(self, text="Constraints"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "CONSTRAINT"
+        self.stored_text = "**CONSTRAINT"
 
 class ContactSubWriter(CcxWriter):
     def __init__(self, text="Contacts"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "CONTACT"
+        self.stored_text = "**CONTACT"
 
 class AmplitudeSubWriter(CcxWriter):
     def __init__(self, text="Amplitudes"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "AMPLITUDE"
+        self.stored_text = "**AMPLITUDE"
 
 class InitialConditionSubWriter(CcxWriter):
     def __init__(self, text="Initial Conditions"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "INITIALCONDITION"
+        self.stored_text = "**INITIALCONDITION"
 
 class StepSubWriter(CcxWriter):
     def __init__(self, text="Step"):
@@ -155,7 +154,7 @@ class StepSubWriter(CcxWriter):
         self.setEditable(False)
         self.stored_text = '''
 *Step
-*Static, Solver=Pardiso
+*Static, Solver=Spooles
 *Output, Frequency=1'''
 
 class BoundarySubWriter(CcxWriter):
@@ -187,13 +186,7 @@ S, E, NOE
 *End step'''
 
 class AnalysisSubWriter(CcxWriter):
-    def __init__(self, script, text="Analysis"):
+    def __init__(self, text="Analysis"):
         super().__init__(text)
-        self.script = script
-
-    def run_script(self):
-        try:
-            result = subprocess.run(self.script, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print("Script output:", result.stdout.decode())
-        except subprocess.CalledProcessError as e:
-            print("Error running script:", e.stderr.decode())
+        self.script: str = f"C:\\Users\\bgawlik\\Desktop\\yapfc\\calculix\\ccx_pastix_exodus.exe {text}"
+        self.inp_string: str = ""

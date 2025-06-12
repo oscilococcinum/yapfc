@@ -13,7 +13,7 @@ from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem
 )
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QObject
 from .viewer import vtkViewer
 from .model import (
     CcxWriter, MeshSubWriter, MaterialSubWriter,
@@ -22,30 +22,26 @@ from .model import (
     Label, AnalysisSubWriter, BoundarySubWriter
 )
 from .mesh import Mesh
+from .runner import run_script, save_inp_file, open_paraview
+from .dialogs import OptionsDialog, get_option_from_json
 
 
-def list_children(item):
-    children = []
-    for row in range(item.rowCount()):
-        child = item.child(row)
-        children.append(child)
-        children.extend(list_children(child))
-    return children
+def collect_components(item):
+    components = [item]  # Start with the current item
 
-def list_model_children(model):
-    children = []
-    for row in range(model.rowCount()):
-        item = model.item(row)
-        children.append(item)
-        children.extend(list_children(item))
-    return children
+    if item.hasChildren():
+        for row in range(item.rowCount()):
+            child_item = item.child(row)
+            components.extend(collect_components(child_item))  # Recursive call
+
+    return components
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.components: list[any] = []
         self.mesh = None
+        self.options = OptionsDialog(self)
 
         def file_menu(self):
             self.file_menu = self.menu_bar.addMenu("File")
@@ -89,83 +85,70 @@ class MainWindow(QMainWindow):
 
         def tools_menu(self):
             self.tools_menu = self.menu_bar.addMenu("Tools")
+            self.options_action = QAction("Options", self)
+            self.tools_menu.addAction(self.options_action)
+            self.tools_menu.triggered.connect(self.open_options_dialog)
 
         def help_menu(self):
             self.help_menu = self.menu_bar.addMenu("Help")
             self.about_action = QAction("About", self)
             self.help_menu.addAction(self.about_action)
 
-        def tree_view(self):
-            # Create a dock widget for the tree view
-            self.dock_widget = QDockWidget("Simulation Components", self)
-            self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+        # Create a dock widget for the tree view
+        self.dock_widget = QDockWidget("Simulation Components", self)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+        # Create the tree view
+        self.tree_view = QTreeView()
+        self.dock_widget.setWidget(self.tree_view)
+        # Set up a standard item model
+        self.model = QStandardItemModel()
+        self.model.setHorizontalHeaderLabels(["Components"])
+        self.tree_view.setModel(self.model)
+        # Add a root writers
+        self.model_item = Label("Model")
+        self.meshes = Label("Meshes")
+        self.materials = Label("Materials")
+        self.sections = Label("Sections")
+        self.constraints = Label("Constraints")
+        self.contacts = Label("Contacts")
+        self.amplitudes = Label("Amplitudes")
+        self.initial_conditions  = Label("Initial Conditions")
+        self.steps = Label("Steps")
+        self.analyses = Label("Analyses")
+        self.model.appendRow(self.model_item)
+        self.model_item.appendRow(self.meshes)
+        self.model_item.appendRow(self.materials)
+        self.model_item.appendRow(self.sections)
+        self.model_item.appendRow(self.constraints)
+        self.model_item.appendRow(self.contacts)
+        self.model_item.appendRow(self.amplitudes)
+        self.model_item.appendRow(self.initial_conditions)
+        self.model_item.appendRow(self.steps)
+        self.model.appendRow(self.analyses)
+        self.tree_view.expandAll()
+        # Connect double-click signal
+        self.tree_view.doubleClicked.connect(self.double_click_on_writer)
+        # Set up context menu
+        self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
-            # Create the tree view
-            self.tree_view = QTreeView()
-            self.dock_widget.setWidget(self.tree_view)
+        self.setWindowTitle("yapfc")
+        self.setGeometry(100, 100, 800, 600)
+        # Create the central widget
+        self.central_widget = vtkViewer(self.mesh)
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        # Create the status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        # Create_menus
+        self.menu_bar = self.menuBar()
 
-            # Set up a standard item model
-            self.model = QStandardItemModel()
-            self.model.setHorizontalHeaderLabels(["Components"])
-            self.tree_view.setModel(self.model)
-
-            # Add a root writers
-            self.model_item = Label("Model")
-            self.meshes = Label("Meshes")
-            self.materials = Label("Materials")
-            self.sections = Label("Sections")
-            self.constraints = Label("Constraints")
-            self.contacts = Label("Contacts")
-            self.amplitudes = Label("Amplitudes")
-            self.initial_conditions  = Label("Initial Conditions")
-            self.steps = Label("Steps")
-            self.analyses = Label("Analyses")
-
-            self.model.appendRow(self.model_item)
-
-            self.model_item.appendRow(self.meshes)
-            self.model_item.appendRow(self.materials)
-            self.model_item.appendRow(self.sections)
-            self.model_item.appendRow(self.constraints)
-            self.model_item.appendRow(self.contacts)
-            self.model_item.appendRow(self.amplitudes)
-            self.model_item.appendRow(self.initial_conditions)
-            self.model_item.appendRow(self.steps)
-
-            self.model.appendRow(self.analyses)
-
-            self.tree_view.expandAll()
-
-            # Connect double-click signal
-            self.tree_view.doubleClicked.connect(self.double_click_on_writer)
-
-            # Set up context menu
-            self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
-            self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
-
-        def main_window(self):
-            self.setWindowTitle("yapfc")
-            self.setGeometry(100, 100, 800, 600)
-
-            # Create the central widget
-            self.central_widget = vtkViewer(self.mesh)
-            self.setCentralWidget(self.central_widget)
-            self.layout = QVBoxLayout(self.central_widget)
-
-            # Create the status bar
-            self.status_bar = QStatusBar()
-            self.setStatusBar(self.status_bar)
-
-            # Create_menus
-            self.menu_bar = self.menuBar()
-
-        main_window(self)
         file_menu(self)
         edit_menu(self)
         view_menu(self)
         tools_menu(self)
         help_menu(self)
-        tree_view(self)
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
@@ -189,6 +172,7 @@ class MainWindow(QMainWindow):
         addBoundary = QAction("Add Boundary", self)
         removeItem = QAction("Remove Item", self)
         runAnalysis = QAction("Run Analysis", self)
+        showResults = QAction("Show Results", self)
 
         match selected_item.getTextLabel():
             case "Meshes":
@@ -205,7 +189,6 @@ class MainWindow(QMainWindow):
                 menu.addAction(addItem)
             case "Analyses":
                 menu.addAction(addItem)
-
             case "Mesh":
                 menu.addAction(removeItem)
             case "Material":
@@ -217,16 +200,18 @@ class MainWindow(QMainWindow):
             case "Initial Condition":
                 menu.addAction(removeItem)
             case "Step":
-                 menu.addAction(removeItem)
-                 menu.addAction(addBoundary)
-            case "Analysis":
+                menu.addAction(addBoundary)
                 menu.addAction(removeItem)
+            case "Analysis":
                 menu.addAction(runAnalysis)
+                menu.addAction(showResults)
+                menu.addAction(removeItem)
 
         addItem.triggered.connect(lambda: self.addItem(selected_item))
         addBoundary.triggered.connect(lambda: self.addBoundary(selected_item))
         removeItem.triggered.connect(lambda: self.removeItem(selected_item))
         runAnalysis.triggered.connect(lambda: self.runAnalysis())
+        showResults.triggered.connect(lambda: self.show_results())
 
         menu.exec(self.tree_view.viewport().mapToGlobal(position))
 
@@ -253,8 +238,6 @@ class MainWindow(QMainWindow):
                 case "Analyses": new_item = AnalysisSubWriter(text)
 
             parent_item.appendRow(new_item)
-            if not isinstance(new_item, AnalysisSubWriter):
-                self.components.append(new_item)
 
     def addBoundary(self, parent_item: QStandardItem):
         if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
@@ -267,12 +250,36 @@ class MainWindow(QMainWindow):
     def removeItem(self, item):
         if item.parent():
             item.parent().removeRow(item.row())
-            self.components.remove(item)
         else:
             self.model.removeRow(item.row())
-            self.components.remove(item)
 
     def runAnalysis(self):
-        comp: CcxWriter
-        for comp in self.components:
-            print(comp.get_text())
+        indexes = self.tree_view.selectedIndexes()
+        if indexes:
+            selected_item = self.model.itemFromIndex(indexes[0])
+
+        inp_list: list[str] = []
+        inp_text: str = ""
+        comp: list[CcxWriter] = collect_components(self.model_item)
+        for i in comp:
+            try:
+                inp_list.append(i.stored_text)
+            except:
+                pass
+
+        for x in inp_list:
+            inp_text = inp_text + x
+        print(inp_text)
+
+        save_inp_file(inp_text, selected_item.text())
+        run_script(get_option_from_json("options.json", "ccx_path"), selected_item.text())
+    
+    def show_results(self) -> None:
+        indexes = self.tree_view.selectedIndexes()
+        if indexes:
+            selected_item = self.model.itemFromIndex(indexes[0])
+
+        open_paraview(get_option_from_json("options.json", "paraview_path"), f"{selected_item.text()}.exo")
+    
+    def open_options_dialog(self) -> None:
+        self.options.exec()
