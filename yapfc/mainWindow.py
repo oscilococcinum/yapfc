@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         self.steps = Label("Steps")
         self.analyses = Label("Analyses")
         self.model.appendRow(self.model_item)
-        self.model_item.appendRow(self.meshes)
+        self.meshesRoot = self.model_item.appendRow(self.meshes)
         self.model_item.appendRow(self.materials)
         self.model_item.appendRow(self.sections)
         self.model_item.appendRow(self.constraints)
@@ -215,8 +215,12 @@ class MainWindow(QMainWindow):
 
     def open_mesh(self):
         fpath = self.open_file_dialog()
-        self.mesh = Mesh(fpath)
-        return self.mesh.actor
+        meshes: QStandardItem  = self.model_item.child(0,0)
+        self.addItem(meshes)
+        newMesh = meshes.child(meshes.rowCount,0)
+        newMesh.load_mesh(fpath)
+        self.mesh = newMesh
+        return newMesh.actor
 
     def addItem(self, parent_item):
         if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()

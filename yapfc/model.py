@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QVBoxLayout, QDialog, QTextEdit, QPushButton
 from PySide6.QtGui import QStandardItem
+from vtk import vtkUnstructuredGrid, vtkCellArray, vtkPoints, vtkTetra, VTK_TETRA, vtkDataSetMapper, vtkActor
+import meshio
 
 
 class TextEditor(QDialog):
@@ -57,48 +59,44 @@ class MeshSubWriter(CcxWriter):
     def __init__(self, text="Mesh"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text ='''
-*Node
-1, -2.62000000E+001, 5.79483884E+000, -4.82760553E+000
-2, -2.62000000E+001, 1.06948388E+001, -4.82760553E+000
-3, -1.52000000E+001, 5.79483884E+000, -4.82760553E+000
-4, -1.52000000E+001, 1.06948388E+001, -4.82760553E+000
-5, -2.62000000E+001, 8.24483884E+000, -4.82760553E+000
-6, -2.62000000E+001, 7.01983884E+000, -4.82760553E+000
-7, -2.62000000E+001, 9.46983884E+000, -4.82760553E+000
-8, -2.62000000E+001, 8.24483884E+000, -2.37760553E+000
-9, -2.62000000E+001, 9.46983884E+000, -3.60260553E+000
-10, -2.62000000E+001, 7.01983884E+000, -3.60260553E+000
-11, -2.07000000E+001, 5.79483884E+000, -4.82760553E+000
-12, -2.07000000E+001, 1.06948388E+001, -4.82760553E+000
-13, -1.52000000E+001, 8.24483884E+000, -4.82760553E+000
-14, -1.52000000E+001, 7.01983884E+000, -4.82760553E+000
-15, -1.52000000E+001, 9.46983884E+000, -4.82760553E+000
-16, -1.52000000E+001, 8.24483884E+000, -2.37760553E+000
-17, -1.52000000E+001, 9.46983884E+000, -3.60260553E+000
-18, -1.52000000E+001, 7.01983884E+000, -3.60260553E+000
-19, -2.62000000E+001, 8.24483884E+000, -3.60260553E+000
-20, -2.07000000E+001, 8.24483884E+000, -4.82760553E+000
-21, -2.07000000E+001, 8.24483884E+000, -2.37760553E+000
-22, -1.52000000E+001, 8.24483884E+000, -3.60260553E+000
+        self.grid:vtkUnstructuredGrid = None
+        self.actor:vtkActor = None
+        self.stored_text =""
+    
+    def load_mesh(self, fpath:str) -> vtkUnstructuredGrid:
+        grid:vtkUnstructuredGrid = vtkUnstructuredGrid()
+        #mesh: meshio.Mesh = meshio.read(fpath)
 
-*Element, Type=C3D15, Elset=Solid_part-2
-1, 2, 8, 5, 4, 16, 13, 9, 19, 7, 17, 22, 15, 12, 21, 20
-2, 1, 5, 8, 3, 13, 16, 6, 19, 10, 14, 22, 18, 11, 20, 21
+        aaa = meshio.Mesh()
 
-*Nset, Nset=Internal_Selection-1_Fixed-1
-1, 2, 5, 6, 7, 8, 9, 10, 19
-*Nset, Nset=Internal-1_Internal_Selection-1_Surface_Traction-1
-3, 4, 13, 14, 15, 16, 17, 18, 22
 
-*Elset, Elset=Internal_Selection-1_Solid_Section-1
-Solid_part-2
-*Elset, Elset=Internal-1_Internal_Selection-1_Surface_Traction-1_S2
-1, 2
+        mesh.points
 
-*Surface, Name=Internal_Selection-1_Surface_Traction-1, Type=Element
-Internal-1_Internal_Selection-1_Surface_Traction-1_S2, S2
-'''
+        vtk_points = vtkPoints()
+        for i in mesh.points:
+            vtk_points.InsertNextPoint(i)
+
+        # Asummes only tetra elements
+        cells = mesh.cells_dict["tetra"]
+        vtk_cells = vtkCellArray()
+        for cell in cells:
+            tetra = vtkTetra()
+            for i in range(4):
+                tetra.GetPointIds().SetId(i, cell[i])
+            vtk_cells.InsertNextCell(tetra)
+
+        grid.SetPoints(vtk_points)
+        grid.SetCells(VTK_TETRA, vtk_cells)
+        self.grid = grid
+#        return grid
+    
+#    def MapGridToActor(self, grid: vtkUnstructuredGrid):
+        mapper = vtkDataSetMapper()
+        mapper.SetInputData(grid)
+        actor = vtkActor()
+        actor.SetMapper(mapper)
+        self.actor = actor
+#        return actor
 
 class MaterialSubWriter(CcxWriter):
     def __init__(self, text="Materials"):
