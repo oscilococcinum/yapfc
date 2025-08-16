@@ -13,6 +13,7 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
     def __init__(self, data: vtk.vtkPolyData):
         self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
         self.data = data
+        print(self.data)
         self.selected_mapper = vtkDataSetMapper()
         self.selected_actor = vtkActor()
 

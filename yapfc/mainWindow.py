@@ -43,56 +43,63 @@ class MainWindow(QMainWindow):
         self.mesh = None
         self.options = OptionsDialog(self)
 
-        def file_menu(self):
-            self.file_menu = self.menu_bar.addMenu("File")
-            self.open_action = QAction("Open", self)
-            self.open_action.triggered.connect(lambda: self.central_widget.AddActor(self.open_mesh()))
-            self.save_action = QAction("Save", self)
-            self.exit_action = QAction("Exit", self)
-            self.exit_action.triggered.connect(self.close)
-            self.file_menu.addAction(self.open_action)
-            self.file_menu.addAction(self.save_action)
-            self.close_action = QAction("Close", self)
-            self.close_action.triggered.connect(lambda: self.central_widget.RemoveActor(self.central_widget.GetAllActors()[0]))
-            self.file_menu.addAction(self.close_action)
-            self.file_menu.addAction(self.exit_action)
+        self.setWindowTitle("yapfc")
+        self.setGeometry(100, 100, 800, 600)
+        # Create the central widget
+        self.central_widget = vtkViewer(self.mesh)
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+        # Create the status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        # Create_menus
+        self.menu_bar = self.menuBar()
 
-        def edit_menu(self):
-            self.edit_menu = self.menu_bar.addMenu("Edit")
-            self.undo_action = QAction("Undo", self)
-            self.redo_action = QAction("Redo", self)
-            self.edit_menu.addAction(self.undo_action)
-            self.edit_menu.addAction(self.redo_action)
+        self.file_menu = self.menu_bar.addMenu("File")
+        self.open_action = QAction("Open", self)
+        self.open_action.triggered.connect(lambda: self.central_widget.AddActor(self.open_mesh()))
+        self.save_action = QAction("Save", self)
+        self.exit_action = QAction("Exit", self)
+        self.exit_action.triggered.connect(self.close)
+        self.file_menu.addAction(self.open_action)
+        self.file_menu.addAction(self.save_action)
+        self.close_action = QAction("Close", self)
+        self.close_action.triggered.connect(lambda: self.central_widget.RemoveActor(self.central_widget.GetAllActors()[0]))
+        self.file_menu.addAction(self.close_action)
+        self.file_menu.addAction(self.exit_action)
 
-        def view_menu(self):
-            self.view_menu = self.menu_bar.addMenu("View")
+        self.edit_menu = self.menu_bar.addMenu("Edit")
+        self.undo_action = QAction("Undo", self)
+        self.redo_action = QAction("Redo", self)
+        self.edit_menu.addAction(self.undo_action)
+        self.edit_menu.addAction(self.redo_action)
 
-            self.wireframe_rep = QAction("Wireframe", self)
-            self.wireframe_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(2))
-            self.view_menu.addAction(self.wireframe_rep)
+        self.view_menu = self.menu_bar.addMenu("View")
 
-            self.points_rep = QAction("Points", self)
-            self.points_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(1))
-            self.view_menu.addAction(self.points_rep)
+        self.wireframe_rep = QAction("Wireframe", self)
+        self.wireframe_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(2))
+        self.view_menu.addAction(self.wireframe_rep)
 
-            self.surface_rep = QAction("Surface", self)
-            self.surface_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(3))
-            self.view_menu.addAction(self.surface_rep)
+        self.points_rep = QAction("Points", self)
+        self.points_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(1))
+        self.view_menu.addAction(self.points_rep)
 
-            self.surface_edges_rep = QAction("Surface with edges", self)
-            self.surface_edges_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(4))
-            self.view_menu.addAction(self.surface_edges_rep)
+        self.surface_rep = QAction("Surface", self)
+        self.surface_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(3))
+        self.view_menu.addAction(self.surface_rep)
 
-        def tools_menu(self):
-            self.tools_menu = self.menu_bar.addMenu("Tools")
-            self.options_action = QAction("Options", self)
-            self.tools_menu.addAction(self.options_action)
-            self.tools_menu.triggered.connect(self.open_options_dialog)
+        self.surface_edges_rep = QAction("Surface with edges", self)
+        self.surface_edges_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(4))
+        self.view_menu.addAction(self.surface_edges_rep)
 
-        def help_menu(self):
-            self.help_menu = self.menu_bar.addMenu("Help")
-            self.about_action = QAction("About", self)
-            self.help_menu.addAction(self.about_action)
+        self.tools_menu = self.menu_bar.addMenu("Tools")
+        self.options_action = QAction("Options", self)
+        self.tools_menu.addAction(self.options_action)
+        self.tools_menu.triggered.connect(self.open_options_dialog)
+
+        self.help_menu = self.menu_bar.addMenu("Help")
+        self.about_action = QAction("About", self)
+        self.help_menu.addAction(self.about_action)
 
         # Create a dock widget for the tree view
         self.dock_widget = QDockWidget("Simulation Components", self)
@@ -131,24 +138,6 @@ class MainWindow(QMainWindow):
         # Set up context menu
         self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
-
-        self.setWindowTitle("yapfc")
-        self.setGeometry(100, 100, 800, 600)
-        # Create the central widget
-        self.central_widget = vtkViewer(self.mesh)
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-        # Create the status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        # Create_menus
-        self.menu_bar = self.menuBar()
-
-        file_menu(self)
-        edit_menu(self)
-        view_menu(self)
-        tools_menu(self)
-        help_menu(self)
 
     def open_file_dialog(self):
         options = QFileDialog.Options()
