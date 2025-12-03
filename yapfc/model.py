@@ -1,6 +1,83 @@
-from PySide6.QtWidgets import QVBoxLayout, QDialog, QTextEdit, QPushButton
+from PySide6.QtWidgets import QGridLayout, QComboBox, QVBoxLayout, QDialog, QLabel, QPushButton, QPlainTextEdit, QTextEdit
 from PySide6.QtGui import QStandardItem
 
+
+def CreateComboBox(items: list[str]):
+    tmpComboBox:QComboBox = QComboBox()
+    tmpComboBox.addItems(items)
+    return tmpComboBox
+
+def getTextFromDialog(fields:dict, key:str) -> str:
+    widget: QPlainTextEdit | QComboBox = fields[key][1]
+    if widget.isEnabled:
+        if isinstance(widget, QPlainTextEdit):
+            return widget.toPlainText()
+        elif isinstance(widget, QComboBox):
+            return widget.currentText()
+        else:
+            return 'Object not handled'
+    else:
+        return ''
+
+class MaterialDialog(QDialog):
+    def __init__(self, writer: 'CcxWriter'):
+        self.fields:dict = {
+                       #Mechanical
+                       'Type':[QLabel('Type:'), CreateComboBox(['*ELASTIC', '*PLASTIC', '*HYPERELASTIC'])],
+                       'Hardening':[QLabel('Hardening:'), CreateComboBox(['ISOTROPIC', 'KINEMATIC', 'COMBINED'])],
+                       'Hyperelastic model':[QLabel('Hyperelastic model:'), CreateComboBox(['ARRUDA-BOYCE', 'MOONEY-RIVLIN', 'NEO HOOKE', 'OGDEN', 'POLYNOMIAL', 'REDUCED POLYNOMIAL', 'YEOH', 'HYPERFOAM'])], 
+                       'Density':[QLabel('Density:'), QPlainTextEdit()],
+                       'Young Modulus':[QLabel('Young Modulus:'), QPlainTextEdit()],
+                       'Plasitc Strain':[QLabel('Plasitc Strain:'), QPlainTextEdit()],
+                       #Thermal
+                       'Expansion Coef.':[QLabel('Expansion Coef.:'), QPlainTextEdit()],
+                       'Ref. Temp.':[QLabel('Ref. Temp.:'), QPlainTextEdit()],
+                       'Expansion Type':[QLabel('Expansion Type:'), CreateComboBox(['ISO', 'ORHTO', 'ANISO'])],
+                       'Conductivity':[QLabel('Conductivity'), QPlainTextEdit()],
+                       'Specific Heat':[QLabel('Specific Heat:'), QPlainTextEdit()]}
+        super().__init__()
+        self.writer = writer
+        self.setWindowTitle(writer.text())
+        self.setGeometry(100, 100, 400, 300)
+
+        self.llayout = QGridLayout(self)
+        for i, field in enumerate(self.fields.values()):
+            for j, widget in enumerate(field):
+                self.llayout.addWidget(widget, i, j)
+
+
+        self.ok_button = QPushButton("Ok", self)
+        self.ok_button.clicked.connect(self.save_text)
+
+        self.cancel_button = QPushButton("Cancel", self)
+        self.cancel_button.clicked.connect(self.close)
+
+        lastRow:int = self.llayout.rowCount()
+        self.llayout.addWidget(self.cancel_button, lastRow, 0)
+        self.llayout.addWidget(self.ok_button, lastRow, 1)
+
+        self.ttype:QComboBox = self.fields['Type'][1]
+        self.hardening:QComboBox = self.fields['Hardening'][1]
+        self.hyper:QComboBox = self.fields['Hyperelastic model'][1]
+        self.ttype.currentTextChanged.connect(self.updateFields)
+        self.hardening.currentTextChanged.connect(self.updateFields)
+        self.hyper.currentTextChanged.connect(self.updateFields)
+
+        self.updateFields()
+
+    def updateFields(self):
+        self.hardening.setEnabled(False)
+        self.hyper.setEnabled(False)
+        if self.ttype.currentText() == 'PLASTIC':
+            self.hardening.setEnabled(True)
+        elif self.ttype.currentText() == 'HYPERELASTIC':
+            self.hyper.setEnabled(True)
+
+    def save_text(self):
+        textArr:list = []
+        for item_key in self.fields.keys():
+            textArr.append(getTextFromDialog(self.fields, item_key))
+        #self.writer.set_text(text)
 
 class TextEditor(QDialog):
     def __init__(self, writer):
@@ -9,15 +86,15 @@ class TextEditor(QDialog):
         self.setWindowTitle(writer.text())
         self.setGeometry(100, 100, 400, 300)
 
-        self.layout = QVBoxLayout(self)
+        self.llayout = QVBoxLayout(self)
 
         self.text_edit = QTextEdit(self)
         self.text_edit.setPlainText(writer.get_text())
-        self.layout.addWidget(self.text_edit)
+        self.llayout.addWidget(self.text_edit)
 
         self.save_button = QPushButton("Save", self)
         self.save_button.clicked.connect(self.save_text)
-        self.layout.addWidget(self.save_button)
+        self.llayout.addWidget(self.save_button)
 
     def save_text(self):
         text = self.text_edit.toPlainText()
@@ -104,8 +181,7 @@ class MaterialSubWriter(CcxWriter):
     def __init__(self, text="Materials"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''
-*Material, Name=ABS
+        self.stored_text = '''*Material, Name=ABS
 *Density
 1.02E-09
 *Elastic
@@ -117,12 +193,15 @@ class MaterialSubWriter(CcxWriter):
 *Specific heat
 1386000000'''
 
+    def doubleClicked(self):
+        self.editor = TextEditor(self)
+        self.editor.exec()
+
 class SectionSubWriter(CcxWriter):
     def __init__(self, text="Sections"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''
-*Solid section, Elset=Internal_Selection-1_Solid_Section-1, Material=ABS'''
+        self.stored_text = '''*Solid section, Elset=Internal_Selection-1_Solid_Section-1, Material=ABS'''
 
 class ConstraintSubWriter(CcxWriter):
     def __init__(self, text="Constraints"):
@@ -152,8 +231,7 @@ class StepSubWriter(CcxWriter):
     def __init__(self, text="Step"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''
-*Step
+        self.stored_text = '''*Step
 *Static, Solver=Spooles
 *Output, Frequency=1'''
 
@@ -161,8 +239,7 @@ class BoundarySubWriter(CcxWriter):
     def __init__(self, text="Boundary"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''
-*Boundary, op=New
+        self.stored_text = '''*Boundary, op=New
 ** Name: Fixed-1
 *Boundary
 Internal_Selection-1_Fixed-1, 1, 6, 0
@@ -188,5 +265,5 @@ S, E, NOE
 class AnalysisSubWriter(CcxWriter):
     def __init__(self, text="Analysis"):
         super().__init__(text)
-        self.script: str = f"C:\\Users\\bgawlik\\Desktop\\yapfc\\calculix\\ccx_pastix_exodus.exe {text}"
+        #self.script: str = f"C:\\Users\\bgawlik\\Desktop\\yapfc\\calculix\\ccx_pastix_exodus.exe {text}"
         self.inp_string: str = ""

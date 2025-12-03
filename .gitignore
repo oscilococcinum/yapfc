@@ -168,3 +168,5 @@ cython_debug/
 *.dat
 *.inp
 *.sta
+*.frd
+*.out

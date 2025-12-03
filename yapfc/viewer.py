@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QMainWindow
 import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
@@ -8,14 +8,29 @@ from vtkmodules.vtkRenderingCore import (
     vtkDataSetMapper,
 )
 
-
 class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
-    def __init__(self, data: vtk.vtkPolyData):
+    def __init__(self, parent:'vtkViewer'):
         self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
-        self.data = data
-        print(self.data)
+        self.parent = parent
         self.selected_mapper = vtkDataSetMapper()
         self.selected_actor = vtkActor()
+
+    def highlightCell(self, cellID:int) -> None:
+        mesh = self.parent.parent.mesh.getMesh()
+        # Create a color array for cells
+        colors = vtk.vtkUnsignedCharArray()
+        colors.SetNumberOfComponents(3)  # RGB
+        colors.SetName("CellColors")
+        
+        # Assign a color to each cell (cube has 6 faces)
+        for i in range(mesh.GetNumberOfCells()):
+            if i == cellID:
+                colors.InsertNextTuple3(255, 0, 0)
+            else:  # Red
+                colors.InsertNextTuple3(255, 255, 255)
+    
+        # Add the color array to cell data
+        mesh.GetCellData().SetScalars(colors)
 
     def left_button_press_event(self, obj, event):
         # Get the location of the click (in window coordinates)
@@ -34,32 +49,26 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
                   {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Cell id is: {picker.GetCellId()}')
 
+        self.highlightCell(picker.GetCellId())
         # Forward events
         self.OnLeftButtonDown()
 
 
 class vtkViewer(QWidget):
-    def __init__(self, mesh):
-        super(vtkViewer, self).__init__()
-
+    def __init__(self, parent:'MainWindow'):
+        super().__init__()
+        self.parent:'MainWindow' = parent
         # vtk initialization
         self.QVTKRenderWindowInteractor = QVTK.QVTKRenderWindowInteractor
-        self.renderer = None
-        self.interactor = None
+        self.renderer = vtk.vtkRenderer()
         self.TrihedronPos = 1
         '''1 = Lower Left , 2 = Lower Right'''
         self.ShowEdges = True
 
-        self.SetupRenderer(mesh)
-        self.SetupTrihedron()
-
-    def SetupRenderer(self, data):
-        self.renderer = vtk.vtkRenderer()
-
         # Set background color of the renderer
         self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
         self.interactor = self.QVTKRenderWindowInteractor(self)
-        self.trackball = MouseInteractorStyle(data)
+        self.trackball = MouseInteractorStyle(self)
         self.trackball.SetDefaultRenderer(self.renderer)
         self.interactor.SetInteractorStyle(self.trackball)
         self.interactor.GetRenderWindow().AddRenderer(self.renderer)
@@ -67,6 +76,14 @@ class vtkViewer(QWidget):
         self.interactor.GetRenderWindow().LineSmoothingOn()
         self.interactor.Initialize()
         self.interactor.Start()
+
+        #Setup Trihedron
+        self.Trihedron = self.MakeAxesActor()
+        self.om1 = vtk.vtkOrientationMarkerWidget()
+        self.om1.SetOrientationMarker(self.Trihedron)
+        self.om1.SetInteractor(self.interactor)
+        self.om1.EnabledOn()
+        self.om1.InteractiveOff()
 
     def UpdateView(self):
         self.interactor.ReInitialize()
@@ -88,14 +105,6 @@ class vtkViewer(QWidget):
         axes.SetConeRadius(1.025 * axes.GetConeRadius())
         axes.SetSphereRadius(1.5 * axes.GetSphereRadius())
         return axes
-
-    def SetupTrihedron(self):
-        self.Trihedron = self.MakeAxesActor()
-        self.om1 = vtk.vtkOrientationMarkerWidget()
-        self.om1.SetOrientationMarker(self.Trihedron)
-        self.om1.SetInteractor(self.interactor)
-        self.om1.EnabledOn()
-        self.om1.InteractiveOff()
 
     def ResizeTrihedron(self, width, height):
         if self.Trihedron:
@@ -132,7 +141,7 @@ class vtkViewer(QWidget):
         self.renderer.RemoveActor(pvtkActor)
         self.ResetCamera()
 
-    def GetAllActors(self):
+    def GetAllActors(self) -> list[vtkActor]:
         """Return a list of all vtkActors currently in the renderer."""
         actors = []
         num_actors = self.renderer.GetActors().GetNumberOfItems()

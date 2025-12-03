@@ -1,29 +1,16 @@
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QStatusBar,
-    QVBoxLayout,
-    QDockWidget,
-    QTreeView,
-    QMenu,
-    QInputDialog,
-    QFileDialog
-)
-from PySide6.QtGui import (
-    QAction,
-    QStandardItemModel,
-    QStandardItem
-)
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QFileDialog
+from PySide6.QtGui import  QAction, QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QPoint, QObject
-from .viewer import vtkViewer
-from .model import (
+from yapfc.viewer import vtkViewer
+from yapfc.model import (
     CcxWriter, MeshSubWriter, MaterialSubWriter,
     SectionSubWriter, ConstraintSubWriter, ContactSubWriter,
     AmplitudeSubWriter, InitialConditionSubWriter, StepSubWriter,
     Label, AnalysisSubWriter, BoundarySubWriter
 )
-from .mesh import Mesh
-from .runner import run_script, save_inp_file, open_paraview
-from .dialogs import OptionsDialog, get_option_from_json
+from yapfc.mesh import Mesh
+from yapfc.runner import run_script, save_inp_file, open_paraview
+from yapfc.dialogs import OptionsDialog, get_option_from_json
 
 
 def collect_components(item):
@@ -46,7 +33,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("yapfc")
         self.setGeometry(100, 100, 800, 600)
         # Create the central widget
-        self.central_widget = vtkViewer(self.mesh)
+        self.central_widget = vtkViewer(self)
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         # Create the status bar
@@ -103,7 +90,7 @@ class MainWindow(QMainWindow):
 
         # Create a dock widget for the tree view
         self.dock_widget = QDockWidget("Simulation Components", self)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.dock_widget)
         # Create the tree view
         self.tree_view = QTreeView()
         self.dock_widget.setWidget(self.tree_view)
@@ -136,7 +123,7 @@ class MainWindow(QMainWindow):
         # Connect double-click signal
         self.tree_view.doubleClicked.connect(self.double_click_on_writer)
         # Set up context menu
-        self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
     def open_file_dialog(self):
@@ -216,7 +203,7 @@ class MainWindow(QMainWindow):
     def open_mesh(self):
         fpath = self.open_file_dialog()
         self.mesh = Mesh(fpath)
-        return self.mesh.actor
+        return self.mesh.getActor()
 
     def addItem(self, parent_item):
         if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
@@ -258,7 +245,7 @@ class MainWindow(QMainWindow):
 
         inp_list: list[str] = []
         inp_text: str = ""
-        comp: list[CcxWriter] = collect_components(self.model_item)
+        comp: list[Label] = collect_components(self.model_item)
         for i in comp:
             try:
                 inp_list.append(i.stored_text)

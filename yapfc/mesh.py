@@ -4,12 +4,20 @@ import meshio
 
 class Mesh():
     def __init__(self, fpath: str) -> None:
-        self.mesh: (vtk.vtkUnstructuredGrid or vtk.vtkPolyData) = self.LoadMesh(fpath)
-        self.actor: vtk.vtkActor = self.MapGridToActor(self.mesh)
+        self.mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None = self._loadMesh(fpath)
+        self.actor: vtk.vtkActor | None = self._MapGridToActor(self.mesh)
 
-    def LoadMesh(self, fpath: str) -> (vtk.vtkUnstructuredGrid or vtk.vtkPolyData):
+    #Getters
+    def getMesh(self) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None:
+        return self.mesh
+    
+    def getActor(self) -> vtk.vtkActor | None:
+        return self.actor
+    
+    #Internal
+    def _loadMesh(self, fpath: str) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None:
         if fpath.endswith(".msh") or fpath.endswith(".mesh"):
-            mesh: meshio.mesh = meshio.read(fpath)
+            mesh: meshio.Mesh = meshio.read(fpath)
 
             vtk_points = vtk.vtkPoints()
             for i in mesh.points:
@@ -32,10 +40,10 @@ class Mesh():
             reader = vtk.vtkSTLReader()
             reader.SetFileName(fpath)  # Replace with your VTK file path
             reader.Update()
-            grid: vtk.vtkPolyData = reader.GetOutput()
+            grid = reader.GetOutput()
             return grid
 
-    def MapGridToActor(self, grid: (vtk.vtkUnstructuredGrid or vtk.vtkPolyData)):
+    def _MapGridToActor(self, grid: vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None):
         mapper = vtk.vtkDataSetMapper()
         mapper.SetInputData(grid)
         actor = vtk.vtkActor()

@@ -9,8 +9,8 @@ def get_option_from_json(json_file:str, option:str) -> str:
             with open(f"{json_file}", "r") as f:
                 options = json.load(f)
                 return options.get(f"{option}", "")
-        except FileNotFoundError:
-            pass
+        except:
+            raise FileNotFoundError
 
 class OptionsDialog(QDialog):
     def __init__(self, parent=None):
