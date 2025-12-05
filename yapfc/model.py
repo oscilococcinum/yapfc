@@ -23,7 +23,7 @@ class MaterialDialog(QDialog):
     def __init__(self, writer: 'CcxWriter'):
         self.fields:dict = {
                        #Mechanical
-                       'Type':[QLabel('Type:'), CreateComboBox(['*ELASTIC', '*PLASTIC', '*HYPERELASTIC'])],
+                       'Type':[QLabel('Type:'), CreateComboBox(['Elastic', 'Elasto-Plastic', 'Hyperelastic'])],
                        'Hardening':[QLabel('Hardening:'), CreateComboBox(['ISOTROPIC', 'KINEMATIC', 'COMBINED'])],
                        'Hyperelastic model':[QLabel('Hyperelastic model:'), CreateComboBox(['ARRUDA-BOYCE', 'MOONEY-RIVLIN', 'NEO HOOKE', 'OGDEN', 'POLYNOMIAL', 'REDUCED POLYNOMIAL', 'YEOH', 'HYPERFOAM'])], 
                        'Density':[QLabel('Density:'), QPlainTextEdit()],

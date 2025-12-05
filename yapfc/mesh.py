@@ -6,6 +6,7 @@ class Mesh():
     def __init__(self, fpath: str) -> None:
         self.mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None = self._loadMesh(fpath)
         self.actor: vtk.vtkActor | None = self._MapGridToActor(self.mesh)
+        self._setColors()
 
     #Getters
     def getMesh(self) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None:
@@ -49,3 +50,14 @@ class Mesh():
         actor = vtk.vtkActor()
         actor.SetMapper(mapper)
         return actor
+    
+    def _setColors(self) -> None:
+        mesh = self.mesh
+        colors = vtk.vtkUnsignedCharArray()
+        colors.SetNumberOfComponents(3)
+        colors.SetName("CellColors")
+
+        for i in range(mesh.GetNumberOfCells()):
+                colors.InsertNextTuple3(255, 150, 255)
+        
+        mesh.GetCellData().SetScalars(colors)

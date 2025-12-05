@@ -1,17 +1,45 @@
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QFileDialog
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QFileDialog, QWidget
 from PySide6.QtGui import  QAction, QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QPoint, QObject
-from yapfc.viewer import vtkViewer
 from yapfc.model import (
     CcxWriter, MeshSubWriter, MaterialSubWriter,
     SectionSubWriter, ConstraintSubWriter, ContactSubWriter,
     AmplitudeSubWriter, InitialConditionSubWriter, StepSubWriter,
     Label, AnalysisSubWriter, BoundarySubWriter
 )
+import vtk
+import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
+from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
+from vtkmodules.vtkRenderingCore import (
+    vtkActor,
+    vtkCellPicker,
+    vtkPointPicker,
+    vtkPicker,
+    vtkDataSetMapper,
+)
+from typing import Any
+from enum import Enum, auto
+import numpy as np
 from yapfc.mesh import Mesh
 from yapfc.runner import run_script, save_inp_file, open_paraview
 from yapfc.dialogs import OptionsDialog, get_option_from_json
 
+class Tools(Enum):
+    Options = 0
+
+class Selection(Enum):
+    Elements = 0
+    Nodes = 1
+    Edges = 2
+    Surfaces = 3
+    Volumes = 4
+
+class SelectionFilter(Enum):
+    Elements = 0
+    Nodes = 1
+    Edges = 2
+    Surfaces = 3
+    Volumes = 4
 
 def collect_components(item):
     components = [item]  # Start with the current item
@@ -27,7 +55,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.mesh = None
+        self.mesh:Mesh | None = None
         self.options = OptionsDialog(self)
 
         self.setWindowTitle("yapfc")
@@ -35,7 +63,7 @@ class MainWindow(QMainWindow):
         # Create the central widget
         self.central_widget = vtkViewer(self)
         self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+        self.llayout = QVBoxLayout(self.central_widget)
         # Create the status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -79,11 +107,18 @@ class MainWindow(QMainWindow):
         self.surface_edges_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(4))
         self.view_menu.addAction(self.surface_edges_rep)
 
-        self.tools_menu = self.menu_bar.addMenu("Tools")
-        self.options_action = QAction("Options", self)
-        self.tools_menu.addAction(self.options_action)
-        self.tools_menu.triggered.connect(self.open_options_dialog)
 
+        # Selection
+        self.selection_menu = self.menu_bar.addMenu("Selection")
+        self.selection_menu.addActions([QAction(item.name, self) for item in Selection])
+        [item.triggered.connect(lambda _, idx=index: self.central_widget.setSelectionFilter(Selection(idx).value)) for index, item in enumerate(self.selection_menu.actions())]
+
+        # Tools
+        self.tools_menu = self.menu_bar.addMenu("Tools")
+        self.tools_menu.addActions([QAction(item.name, self) for item in Tools])
+        self.tools_menu.actions()[Tools.Options.value].triggered.connect(self.open_options_dialog)
+
+        # Help
         self.help_menu = self.menu_bar.addMenu("Help")
         self.about_action = QAction("About", self)
         self.help_menu.addAction(self.about_action)
@@ -127,8 +162,8 @@ class MainWindow(QMainWindow):
         self.tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
     def open_file_dialog(self):
-        options = QFileDialog.Options()
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*);;STL Files (*.stl);;Mesh Files (*.mesh);;Msh Files (*.msh)", options=options)
+        options = QFileDialog()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*);;STL Files (*.stl);;Mesh Files (*.mesh);;Msh Files (*.msh)", options=options.options())
         return file_name
 
     def double_click_on_writer(self, index):
@@ -137,6 +172,7 @@ class MainWindow(QMainWindow):
             item.doubleClicked()
 
     def open_context_menu(self, position: QPoint):
+        selected_item: CcxWriter | QStandardItem
         indexes = self.tree_view.selectedIndexes()
         if indexes:
             selected_item = self.model.itemFromIndex(indexes[0])
@@ -206,8 +242,6 @@ class MainWindow(QMainWindow):
         return self.mesh.getActor()
 
     def addItem(self, parent_item):
-        if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
-        else: nextIndex: int = 0
         parent_class: str = parent_item.getTextLabel()
         text, ok = QInputDialog.getText(self, f"Add {parent_class}", "Enter item name:")
         if ok and text:
@@ -222,7 +256,7 @@ class MainWindow(QMainWindow):
                 case "Steps": new_item = StepSubWriter(text)
                 case "Analyses": new_item = AnalysisSubWriter(text)
 
-            parent_item.appendRow(new_item)
+            parent_item.appendRow(new_item) #type:ignore
 
     def addBoundary(self, parent_item: QStandardItem):
         if parent_item.hasChildren(): nextIndex: int = parent_item.rowCount()
@@ -268,3 +302,281 @@ class MainWindow(QMainWindow):
     
     def open_options_dialog(self) -> None:
         self.options.exec()
+
+class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
+    def __init__(self, parent:'vtkViewer'):
+        self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
+        self.parent = parent
+        self.selected_mapper = vtkDataSetMapper()
+        self.selected_actor = vtkActor()
+
+    def left_button_press_event(self, obj, event):
+        match self.parent.selectionFilter:
+            case SelectionFilter.Elements:
+                self.pickCell()
+            case SelectionFilter.Nodes:
+                self.nodePick()
+            case SelectionFilter.Edges:
+                self.edgePick()
+            case SelectionFilter.Surfaces:
+               self.surfacePick() 
+            case SelectionFilter.Volumes:
+                self.volumePick()
+        self.OnLeftButtonDown()
+
+    def pickCell(self) -> None:
+        pos = self.GetInteractor().GetEventPosition()
+
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.0005)
+
+        picker.Pick(pos[0], pos[1], 0, self.GetDefaultRenderer())
+
+        world_position = picker.GetPickPosition()
+
+        cellId:int = picker.GetCellId()
+
+        if cellId != -1:
+            print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
+            print(f'Cell id is: {cellId}')
+            self.parent.appendSelection(cellId)
+        else:
+            self.parent.clearSelection()
+            print('Selection clean')
+    
+    def nodePick(self) -> None:
+        pos = self.GetInteractor().GetEventPosition()
+
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.0005)
+
+        picker.Pick(pos[0], pos[1], 0, self.GetDefaultRenderer())
+
+        world_position = picker.GetPickPosition()
+
+        pointId:int = picker.GetPointId()
+
+        if pointId != -1:
+            print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
+            print(f'Point id is: {pointId}')
+            self.parent.appendSelection(pointId)
+        else:
+            self.parent.clearSelection()
+            print('Selection clean')
+
+    def edgePick(self) -> None:
+        pass
+
+    def surfacePick(self) -> None:
+        pass
+
+    def volumePick(self) -> None:
+        pass
+
+class vtkViewer(QWidget):
+    def __init__(self, parent:MainWindow):
+        super().__init__()
+        self.parent:MainWindow = parent
+        # vtk initialization
+        self.QVTKRenderWindowInteractor = QVTK.QVTKRenderWindowInteractor
+        self.renderer = vtk.vtkRenderer()
+        self.TrihedronPos = 1
+        '''1 = Lower Left , 2 = Lower Right'''
+        self.ShowEdges = True
+        self.selectionFilter:SelectionFilter = SelectionFilter(1)
+        self.cellSelection:list = []
+        self.nodeSelection:list = []
+        self.edgeSelection:list = []
+        self.surfaceSelection:list = []
+        self.volumeSelection:list = []
+
+        # Set background color of the renderer
+        self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
+        self.interactor = self.QVTKRenderWindowInteractor(self)
+        self.trackball = MouseInteractorStyle(self)
+        self.trackball.SetDefaultRenderer(self.renderer)
+        self.interactor.SetInteractorStyle(self.trackball)
+        self.interactor.GetRenderWindow().AddRenderer(self.renderer)
+        self.interactor.GetRenderWindow().PointSmoothingOn()
+        self.interactor.GetRenderWindow().LineSmoothingOn()
+        self.interactor.Initialize()
+        self.interactor.Start()
+
+        #Setup Trihedron
+        self.Trihedron = self.MakeAxesActor()
+        self.om1 = vtk.vtkOrientationMarkerWidget()
+        self.om1.SetOrientationMarker(self.Trihedron)
+        self.om1.SetInteractor(self.interactor)
+        self.om1.EnabledOn()
+        self.om1.InteractiveOff()
+
+    def UpdateView(self):
+        self.interactor.ReInitialize()
+        self.interactor.GetRenderWindow().Render()
+        self.repaint()
+
+    def paintEvent(self, ev):
+        size = self.size()
+        self.interactor.GetRenderWindow().SetSize(size.width(), size.height())
+
+    def MakeAxesActor(self):
+        axes = vtk.vtkAxesActor()
+        axes.SetShaftTypeToCylinder()
+        axes.SetXAxisLabelText('X')
+        axes.SetYAxisLabelText('Y')
+        axes.SetZAxisLabelText('Z')
+        axes.SetTotalLength(1.5, 1.5, 1.5)
+        axes.SetCylinderRadius(0.5 * axes.GetCylinderRadius())
+        axes.SetConeRadius(1.025 * axes.GetConeRadius())
+        axes.SetSphereRadius(1.5 * axes.GetSphereRadius())
+        return axes
+
+    def ResizeTrihedron(self, width, height):
+        if self.Trihedron:
+            if (width == 0):
+                width = 100
+            if (height == 0):
+                height = 100
+
+            if self.TrihedronPos == 1:  # Position lower Left in the viewport.
+                self.om1.SetViewport(0, 0, (200.0 / width), (200.0 / height))
+
+            if self.TrihedronPos == 2:  # Position lower Right in the viewport.
+                self.om1.SetViewport(1 - (200.0 / width),
+                                     0, 1, (200.0 / height))
+
+    def resizeEvent(self, ev):
+        self.interactor.GetRenderWindow().SetSize(self.size().width(),
+                                                  self.size().height())
+        self.ResizeTrihedron(self.size().width(), self.size().height())
+
+    def ResetCamera(self):
+        self.renderer.ResetCamera()
+        self.camera = self.renderer.GetActiveCamera()
+        self.camera.ParallelProjectionOn()
+
+    def AddActor(self, pvtkActor):
+        if self.ShowEdges:
+            pvtkActor.GetProperty().EdgeVisibilityOn()
+
+        self.renderer.AddActor(pvtkActor)
+        self.ResetCamera()
+
+    def RemoveActor(self, pvtkActor):
+        self.renderer.RemoveActor(pvtkActor)
+        self.ResetCamera()
+
+    def GetAllActors(self) -> list[vtkActor]:
+        """Return a list of all vtkActors currently in the renderer."""
+        actors = []
+        num_actors = self.renderer.GetActors().GetNumberOfItems()
+        for i in range(num_actors):
+            actor = self.renderer.GetActors().GetItemAsObject(i)
+            actors.append(actor)
+        return actors
+
+    def SetRepresentation(self, aTyp):
+        ''' aTyp = 1 - Points
+            aTyp = 2 - Wireframe
+            aTyp = 3 - Surface
+            aTyp = 4 - Surface with edges
+        '''
+        num_actors = self.renderer.GetActors().GetNumberOfItems()
+        for i in range(num_actors):
+            actor:vtkActor = self.renderer.GetActors().GetItemAsObject(i)
+            if (aTyp == 1):
+                actor.GetProperty().SetRepresentationToPoints()
+                actor.GetProperty().SetPointSize(4.0)
+                self.ShowEdges = False
+
+            if (aTyp == 2):
+                actor.GetProperty().SetRepresentationToWireframe()
+                self.ShowEdges = False
+
+            if (aTyp == 3):
+                actor.GetProperty().SetRepresentationToSurface()
+                actor.GetProperty().EdgeVisibilityOff()
+                self.ShowEdges = False
+
+            if (aTyp == 4):
+                actor.GetProperty().SetRepresentationToSurface()
+                actor.GetProperty().EdgeVisibilityOn()
+                self.ShowEdges = True
+
+        self.UpdateView()
+
+    def getSelection(self) -> list[int]:
+        return self.selection
+    
+    def appendCellSelection(self, idx:int, selectionType:SelectionFilter) -> None:
+        match self.selectionFilter:
+            case SelectionFilter.Elements:
+                sel:list[int] = self.cellSelection
+                if idx not in sel:
+                    sel.append(idx)
+                    self.highlightSelection()
+                else:
+                    print('No change in cell selection')
+            case SelectionFilter.Nodes:
+                sel:list[int] = self.nodeSelection
+                if idx not in sel:
+                    sel.append(idx)
+                    self.highlightSelection()
+                else:
+                    print('No change in selection')
+            case SelectionFilter.Edges:
+                sel:list[int] = self.edgeSelection
+                if idx not in sel:
+                    sel.append(idx)
+                    self.highlightSelection()
+                else:
+                    print('No change in selection')
+            case SelectionFilter.Surfaces:
+                sel:list[int] = self.surfaceSelection
+                if idx not in sel:
+                    sel.append(idx)
+                    self.highlightSelection()
+                else:
+                    print('No change in selection')
+            case SelectionFilter.Volumes:
+                sel:list[int] = self.volumeSelection
+                if idx not in sel:
+                    sel.append(idx)
+                    self.highlightSelection()
+                else:
+                    print('No change in selection')
+
+    def clearSelection(self) -> None:
+        selection:list[int] = self.getSelection()
+        try:
+            mesh = self.parent.mesh.getMesh()
+            colors:vtk.vtkUnsignedCharArray = self.parent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+
+            for i in selection:
+                colors.SetTuple3(i, 255, 255, 255)
+                print(colors.GetTuple3(i))
+
+            mesh.GetCellData().SetScalars(colors)
+            mesh.GetCellData().SetActiveScalars('CellColors')
+            self.selection.clear()
+        except:
+            print('Clear of selection unsuccesfull')
+
+    def highlightSelection(self) -> None:
+        selection:list[int] = self.getSelection()
+        try:
+            mesh = self.parent.mesh.getMesh()
+            colors:vtk.vtkUnsignedCharArray = self.parent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+
+            for i in selection:
+                colors.SetTuple3(i, 255, 0, 0)
+                print(colors.GetTuple3(i))
+
+            mesh.GetCellData().SetScalars(colors)
+            mesh.GetCellData().SetActiveScalars('CellColors')
+        except:
+            print('Highlight unsuccesfull')
+
+    def setSelectionFilter(self, filter:int) -> None:
+        self.selectionFilter = SelectionFilter(filter)
+        print(f'Filter changed to {self.selectionFilter}')
