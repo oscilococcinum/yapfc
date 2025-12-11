@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QFileDialog, QWidget
 from PySide6.QtGui import  QAction, QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt, QPoint, QObject
+from PySide6.QtCore import Qt, QPoint, QObject, QModelIndex
 from yapfc.model import (
     CcxWriter, MeshSubWriter, MaterialSubWriter,
     SectionSubWriter, ConstraintSubWriter, ContactSubWriter,
@@ -17,7 +17,7 @@ from vtkmodules.vtkRenderingCore import (
     vtkPicker,
     vtkDataSetMapper,
 )
-from typing import Any
+from typing import Any, cast, List
 from enum import Enum, auto
 import numpy as np
 from yapfc.mesh import Mesh
@@ -41,6 +41,12 @@ class SelectionFilter(Enum):
     Surfaces = 3
     Volumes = 4
 
+def isInsOrSubclsIns(obj:Any, cls:type) -> bool:
+    if isinstance(obj, cls) or issubclass(type(obj), cls):
+        return True
+    else:
+        return False
+
 def collect_components(item):
     components = [item]  # Start with the current item
 
@@ -55,7 +61,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.mesh:Mesh | None = None
+        self.mesh:Mesh
         self.options = OptionsDialog(self)
 
         self.setWindowTitle("yapfc")
@@ -172,12 +178,11 @@ class MainWindow(QMainWindow):
             item.doubleClicked()
 
     def open_context_menu(self, position: QPoint):
-        selected_item: CcxWriter | QStandardItem
-        indexes = self.tree_view.selectedIndexes()
+        indexes:'list[QModelIndex]' = self.tree_view.selectedIndexes()
         if indexes:
-            selected_item = self.model.itemFromIndex(indexes[0])
+            selected_item:Any = self.model.itemFromIndex(indexes[0])
         else:
-            selected_item = self.root_item
+            return
 
         selected_item_class: str = selected_item.getTextLabel()
         if selected_item_class.endswith("ses"):
@@ -275,37 +280,36 @@ class MainWindow(QMainWindow):
     def runAnalysis(self):
         indexes = self.tree_view.selectedIndexes()
         if indexes:
-            selected_item = self.model.itemFromIndex(indexes[0])
+            selected_item:Label = self.model.itemFromIndex(indexes[0]) #type:ignore
 
-        inp_list: list[str] = []
-        inp_text: str = ""
-        comp: list[Label] = collect_components(self.model_item)
-        for i in comp:
-            try:
-                inp_list.append(i.stored_text)
-            except:
-                pass
+            inp_list: list[str] = []
+            inp_text: str = ""
+            comp: list[Label] = collect_components(self.model_item)
+            for label in comp:
+                try:
+                    inp_list.append(label.getStoredText())
+                except:
+                    pass
 
-        for x in inp_list:
-            inp_text = inp_text + x
-        print(inp_text)
+            for x in inp_list:
+                inp_text = inp_text + '\n' + x
+            print(inp_text)
 
-        save_inp_file(inp_text, selected_item.text())
-        run_script(get_option_from_json("options.json", "ccx_path"), selected_item.text())
+            save_inp_file(inp_text, selected_item.text())
+            run_script(get_option_from_json("options.json", "ccx_path"), selected_item.text())
     
     def show_results(self) -> None:
         indexes = self.tree_view.selectedIndexes()
         if indexes:
             selected_item = self.model.itemFromIndex(indexes[0])
-
-        open_paraview(get_option_from_json("options.json", "paraview_path"), f"{selected_item.text()}.exo")
+            open_paraview(get_option_from_json("options.json", "paraview_path"), f"{selected_item.text()}.exo")
     
     def open_options_dialog(self) -> None:
         self.options.exec()
 
 class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
     def __init__(self, parent:'vtkViewer'):
-        self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
+        self.AddObserver('LeftButtonPressEvent', self.left_button_press_event) #type:ignore
         self.parent = parent
         self.selected_mapper = vtkDataSetMapper()
         self.selected_actor = vtkActor()
@@ -339,9 +343,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if cellId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Cell id is: {cellId}')
-            self.parent.appendSelection(cellId)
+            self.parent.appendSelection(cellId, SelectionFilter.Elements)
         else:
-            self.parent.clearSelection()
+            self.parent.clearSelection(SelectionFilter.Elements)
             print('Selection clean')
     
     def nodePick(self) -> None:
@@ -359,9 +363,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if pointId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Point id is: {pointId}')
-            self.parent.appendSelection(pointId)
+            self.parent.appendSelection(pointId, SelectionFilter.Nodes)
         else:
-            self.parent.clearSelection()
+            self.parent.clearSelection(SelectionFilter.Nodes)
             print('Selection clean')
 
     def edgePick(self) -> None:
@@ -376,7 +380,7 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
 class vtkViewer(QWidget):
     def __init__(self, parent:MainWindow):
         super().__init__()
-        self.parent:MainWindow = parent
+        self.pparent = parent
         # vtk initialization
         self.QVTKRenderWindowInteractor = QVTK.QVTKRenderWindowInteractor
         self.renderer = vtk.vtkRenderer()
@@ -483,7 +487,7 @@ class vtkViewer(QWidget):
         '''
         num_actors = self.renderer.GetActors().GetNumberOfItems()
         for i in range(num_actors):
-            actor:vtkActor = self.renderer.GetActors().GetItemAsObject(i)
+            actor:vtkActor = self.renderer.GetActors().GetItemAsObject(i) #type:ignore
             if (aTyp == 1):
                 actor.GetProperty().SetRepresentationToPoints()
                 actor.GetProperty().SetPointSize(4.0)
@@ -505,77 +509,109 @@ class vtkViewer(QWidget):
 
         self.UpdateView()
 
-    def getSelection(self) -> list[int]:
-        return self.selection
-    
-    def appendCellSelection(self, idx:int, selectionType:SelectionFilter) -> None:
-        match self.selectionFilter:
+    def getSelection(self, filter:SelectionFilter) -> list[int]:
+        match filter:
+            case SelectionFilter.Nodes:
+                return self.nodeSelection
+            case SelectionFilter.Edges:
+                return self.edgeSelection
+            case SelectionFilter.Elements:
+                return self.cellSelection
+            case SelectionFilter.Surfaces:
+                return self.surfaceSelection
+            case SelectionFilter.Volumes:
+                return self.volumeSelection
+            case _:
+                return self.nodeSelection
+
+    def appendSelection(self, idx:int, selectionType:SelectionFilter) -> None:
+        match selectionType:
             case SelectionFilter.Elements:
                 sel:list[int] = self.cellSelection
                 if idx not in sel:
                     sel.append(idx)
-                    self.highlightSelection()
+                    self.highlightSelection(selectionType)
                 else:
                     print('No change in cell selection')
             case SelectionFilter.Nodes:
                 sel:list[int] = self.nodeSelection
                 if idx not in sel:
                     sel.append(idx)
-                    self.highlightSelection()
+                    self.highlightSelection(selectionType)
                 else:
                     print('No change in selection')
             case SelectionFilter.Edges:
                 sel:list[int] = self.edgeSelection
                 if idx not in sel:
                     sel.append(idx)
-                    self.highlightSelection()
+                    self.highlightSelection(selectionType)
                 else:
                     print('No change in selection')
             case SelectionFilter.Surfaces:
                 sel:list[int] = self.surfaceSelection
                 if idx not in sel:
                     sel.append(idx)
-                    self.highlightSelection()
+                    self.highlightSelection(selectionType)
                 else:
                     print('No change in selection')
             case SelectionFilter.Volumes:
                 sel:list[int] = self.volumeSelection
                 if idx not in sel:
                     sel.append(idx)
-                    self.highlightSelection()
+                    self.highlightSelection(selectionType)
                 else:
                     print('No change in selection')
 
-    def clearSelection(self) -> None:
-        selection:list[int] = self.getSelection()
-        try:
-            mesh = self.parent.mesh.getMesh()
-            colors:vtk.vtkUnsignedCharArray = self.parent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+    def clearSelection(self, selectionType:SelectionFilter) -> None:
+        selection:list[int] = self.getSelection(selectionType)
+        match selectionType:
+            case SelectionFilter.Nodes:
+                pass
+            case SelectionFilter.Edges:
+                pass
+            case SelectionFilter.Elements:
+                try:
+                    mesh = self.pparent.mesh.getMesh()
+                    colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+                
+                    for i in selection:
+                        colors.SetTuple3(i, 255, 255, 255)
+                        print(colors.GetTuple3(i))
+                
+                    mesh.GetCellData().SetScalars(colors)
+                    mesh.GetCellData().SetActiveScalars('CellColors')
+                    selection.clear()
+                except:
+                    print('Clear of selection unsuccesfull')
+            case SelectionFilter.Surfaces:
+                pass
+            case Selection.Volumes:
+                pass
 
-            for i in selection:
-                colors.SetTuple3(i, 255, 255, 255)
-                print(colors.GetTuple3(i))
+    def highlightSelection(self, selectionType:SelectionFilter) -> None:
+        selection:list[int] = self.getSelection(selectionType)
+        match selectionType:
+            case SelectionFilter.Nodes:
+                pass
+            case SelectionFilter.Edges:
+                pass
+            case SelectionFilter.Elements:
+                try:
+                    mesh = self.pparent.mesh.getMesh()
+                    colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
 
-            mesh.GetCellData().SetScalars(colors)
-            mesh.GetCellData().SetActiveScalars('CellColors')
-            self.selection.clear()
-        except:
-            print('Clear of selection unsuccesfull')
+                    for i in selection:
+                        colors.SetTuple3(i, 255, 0, 0)
+                        print(colors.GetTuple3(i))
 
-    def highlightSelection(self) -> None:
-        selection:list[int] = self.getSelection()
-        try:
-            mesh = self.parent.mesh.getMesh()
-            colors:vtk.vtkUnsignedCharArray = self.parent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-
-            for i in selection:
-                colors.SetTuple3(i, 255, 0, 0)
-                print(colors.GetTuple3(i))
-
-            mesh.GetCellData().SetScalars(colors)
-            mesh.GetCellData().SetActiveScalars('CellColors')
-        except:
-            print('Highlight unsuccesfull')
+                    mesh.GetCellData().SetScalars(colors)
+                    mesh.GetCellData().SetActiveScalars('CellColors')
+                except:
+                    print('Highlight unsuccesfull')
+            case SelectionFilter.Surfaces:
+                pass
+            case Selection.Volumes:
+                pass
 
     def setSelectionFilter(self, filter:int) -> None:
         self.selectionFilter = SelectionFilter(filter)

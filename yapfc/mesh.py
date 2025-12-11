@@ -1,22 +1,23 @@
 import vtk
 import meshio
+from copy import copy, deepcopy
 
 
 class Mesh():
     def __init__(self, fpath: str) -> None:
-        self.mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None = self._loadMesh(fpath)
-        self.actor: vtk.vtkActor | None = self._MapGridToActor(self.mesh)
+        self._mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData = self._loadMesh(fpath)
+        self._actor: vtk.vtkActor = self._MapGridToActor(self._mesh)
         self._setColors()
 
     #Getters
-    def getMesh(self) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None:
-        return self.mesh
+    def getMesh(self) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData:
+        return self._mesh
     
-    def getActor(self) -> vtk.vtkActor | None:
-        return self.actor
+    def getActor(self) -> vtk.vtkActor:
+        return self._actor
     
     #Internal
-    def _loadMesh(self, fpath: str) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None:
+    def _loadMesh(self, fpath: str) -> vtk.vtkUnstructuredGrid | vtk.vtkPolyData:
         if fpath.endswith(".msh") or fpath.endswith(".mesh"):
             mesh: meshio.Mesh = meshio.read(fpath)
 
@@ -43,6 +44,9 @@ class Mesh():
             reader.Update()
             grid = reader.GetOutput()
             return grid
+        else:
+            print(f'This format is not yet implemented')
+            return vtk.vtkSTLReader().GetOutput()
 
     def _MapGridToActor(self, grid: vtk.vtkUnstructuredGrid | vtk.vtkPolyData | None):
         mapper = vtk.vtkDataSetMapper()
@@ -52,7 +56,7 @@ class Mesh():
         return actor
     
     def _setColors(self) -> None:
-        mesh = self.mesh
+        mesh = self._mesh
         colors = vtk.vtkUnsignedCharArray()
         colors.SetNumberOfComponents(3)
         colors.SetName("CellColors")

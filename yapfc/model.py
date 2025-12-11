@@ -1,5 +1,26 @@
 from PySide6.QtWidgets import QGridLayout, QComboBox, QVBoxLayout, QDialog, QLabel, QPushButton, QPlainTextEdit, QTextEdit
 from PySide6.QtGui import QStandardItem
+from copy import copy, deepcopy
+from typing import Callable, TypeVar, ParamSpec
+from functools import wraps
+
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+def refOnDemand(fn: Callable[P, T]) -> Callable[P, T]:
+    @wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        want_copy = kwargs.pop("ref", True)
+        deep = kwargs.pop("deepCopyRef", True)
+        
+        result = fn(*args, **kwargs)
+        if not want_copy:
+            return result
+        
+        return deepcopy(result) if deep else copy(result)
+    
+    return wrapper
 
 
 def CreateComboBox(items: list[str]):
@@ -80,7 +101,7 @@ class MaterialDialog(QDialog):
         #self.writer.set_text(text)
 
 class TextEditor(QDialog):
-    def __init__(self, writer):
+    def __init__(self, writer:'CcxWriter'):
         super().__init__()
         self.writer = writer
         self.setWindowTitle(writer.text())
@@ -89,7 +110,7 @@ class TextEditor(QDialog):
         self.llayout = QVBoxLayout(self)
 
         self.text_edit = QTextEdit(self)
-        self.text_edit.setPlainText(writer.get_text())
+        self.text_edit.setPlainText(writer.getStoredText())
         self.llayout.addWidget(self.text_edit)
 
         self.save_button = QPushButton("Save", self)
@@ -98,43 +119,55 @@ class TextEditor(QDialog):
 
     def save_text(self):
         text = self.text_edit.toPlainText()
-        self.writer.set_text(text)
+        self.writer.setStoredText(text)
 
 class Label(QStandardItem):
     def __init__(self, text="Label"):
         super().__init__(text)
+        self._textLabel = text
         self.setEditable(False)
-        self.textLabel = text
 
+    # Getters
+    @refOnDemand
     def getTextLabel(self):
-        return self.textLabel
+        return self._textLabel
+
+    # Virtual
+    @refOnDemand
+    def getStoredText(self) -> str:
+        return ''
 
 class CcxWriter(QStandardItem):
     def __init__(self, text="CcxWriter"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = ""
-        self.className = str(type(self)).split(".")[-1].split("Sub")[0]
-        self.textLabel = self.className
+        self._stored_text = ""
+        self._className = str(type(self)).split(".")[-1].split("Sub")[0]
+        self._textLabel = self._className
 
-    def doubleClicked(self):
+    # Actions
+    def doubleClicked(self) -> None:
         self.editor = TextEditor(self)
         self.editor.exec()
 
-    def set_text(self, newText):
-        self.stored_text = newText
+    # Setters
+    def setStoredText(self, newText:str) -> None:
+        self._stored_text = newText
 
-    def get_text(self):
-        return self.stored_text
-
-    def getTextLabel(self):
-        return self.textLabel
+    # Getters
+    @refOnDemand
+    def getStoredText(self) -> str:
+        return copy(self._stored_text)
+    
+    @refOnDemand
+    def getTextLabel(self) -> str:
+        return self._textLabel
 
 class MeshSubWriter(CcxWriter):
     def __init__(self, text="Mesh"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text ='''
+        self.setStoredText('''
 *Node
 1, -2.62000000E+001, 5.79483884E+000, -4.82760553E+000
 2, -2.62000000E+001, 1.06948388E+001, -4.82760553E+000
@@ -174,14 +207,13 @@ Solid_part-2
 1, 2
 
 *Surface, Name=Internal_Selection-1_Surface_Traction-1, Type=Element
-Internal-1_Internal_Selection-1_Surface_Traction-1_S2, S2
-'''
+Internal-1_Internal_Selection-1_Surface_Traction-1_S2, S2''')
 
 class MaterialSubWriter(CcxWriter):
     def __init__(self, text="Materials"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''*Material, Name=ABS
+        self.setStoredText('''*Material, Name=ABS
 *Density
 1.02E-09
 *Elastic
@@ -191,7 +223,7 @@ class MaterialSubWriter(CcxWriter):
 *Conductivity
 0.2256
 *Specific heat
-1386000000'''
+1386000000''')
 
     def doubleClicked(self):
         self.editor = TextEditor(self)
@@ -201,45 +233,46 @@ class SectionSubWriter(CcxWriter):
     def __init__(self, text="Sections"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''*Solid section, Elset=Internal_Selection-1_Solid_Section-1, Material=ABS'''
+        self.setStoredText('''*Solid section, Elset=Internal_Selection-1_Solid_Section-1, Material=ABS''')
 
 class ConstraintSubWriter(CcxWriter):
     def __init__(self, text="Constraints"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "**CONSTRAINT"
+        self.setStoredText("**CONSTRAINT")
 
 class ContactSubWriter(CcxWriter):
     def __init__(self, text="Contacts"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "**CONTACT"
+        self.setStoredText("**CONTACT")
 
 class AmplitudeSubWriter(CcxWriter):
     def __init__(self, text="Amplitudes"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "**AMPLITUDE"
+        self.setStoredText("**AMPLITUDE")
 
 class InitialConditionSubWriter(CcxWriter):
     def __init__(self, text="Initial Conditions"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = "**INITIALCONDITION"
+        self.setStoredText("**INITIALCONDITION")
 
 class StepSubWriter(CcxWriter):
     def __init__(self, text="Step"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''*Step
+        self.setStoredText('''
+*Step
 *Static, Solver=Spooles
-*Output, Frequency=1'''
+*Output, Frequency=1''')
 
 class BoundarySubWriter(CcxWriter):
     def __init__(self, text="Boundary"):
         super().__init__(text)
         self.setEditable(False)
-        self.stored_text = '''*Boundary, op=New
+        self.setStoredText('''*Boundary, op=New
 ** Name: Fixed-1
 *Boundary
 Internal_Selection-1_Fixed-1, 1, 6, 0
@@ -260,10 +293,12 @@ S, E, NOE
 **
 ** End step ++++++++++++++++++++++++++++++++++++++++++++++++
 **
-*End step'''
+*End step''')
 
 class AnalysisSubWriter(CcxWriter):
     def __init__(self, text="Analysis"):
         super().__init__(text)
-        #self.script: str = f"C:\\Users\\bgawlik\\Desktop\\yapfc\\calculix\\ccx_pastix_exodus.exe {text}"
-        self.inp_string: str = ""
+        self._inp_string: str = ""
+
+    def setInpString(self, newInpStr:str) -> None:
+        self._inp_string = newInpStr
