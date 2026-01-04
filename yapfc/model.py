@@ -1,8 +1,8 @@
-from PySide6.QtWidgets import QGridLayout, QComboBox, QVBoxLayout, QDialog, QLabel, QPushButton, QPlainTextEdit, QTextEdit
 from PySide6.QtGui import QStandardItem
 from copy import copy, deepcopy
 from typing import Callable, TypeVar, ParamSpec
 from functools import wraps
+from yapfc.dialogs import TextEditor, MaterialDialog
 
 
 T = TypeVar("T")
@@ -13,113 +13,15 @@ def refOnDemand(fn: Callable[P, T]) -> Callable[P, T]:
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         want_copy = kwargs.pop("ref", True)
         deep = kwargs.pop("deepCopyRef", True)
-        
+
         result = fn(*args, **kwargs)
         if not want_copy:
             return result
-        
+
         return deepcopy(result) if deep else copy(result)
-    
+
     return wrapper
 
-
-def CreateComboBox(items: list[str]):
-    tmpComboBox:QComboBox = QComboBox()
-    tmpComboBox.addItems(items)
-    return tmpComboBox
-
-def getTextFromDialog(fields:dict, key:str) -> str:
-    widget: QPlainTextEdit | QComboBox = fields[key][1]
-    if widget.isEnabled:
-        if isinstance(widget, QPlainTextEdit):
-            return widget.toPlainText()
-        elif isinstance(widget, QComboBox):
-            return widget.currentText()
-        else:
-            return 'Object not handled'
-    else:
-        return ''
-
-class MaterialDialog(QDialog):
-    def __init__(self, writer: 'CcxWriter'):
-        self.fields:dict = {
-                       #Mechanical
-                       'Type':[QLabel('Type:'), CreateComboBox(['Elastic', 'Elasto-Plastic', 'Hyperelastic'])],
-                       'Hardening':[QLabel('Hardening:'), CreateComboBox(['ISOTROPIC', 'KINEMATIC', 'COMBINED'])],
-                       'Hyperelastic model':[QLabel('Hyperelastic model:'), CreateComboBox(['ARRUDA-BOYCE', 'MOONEY-RIVLIN', 'NEO HOOKE', 'OGDEN', 'POLYNOMIAL', 'REDUCED POLYNOMIAL', 'YEOH', 'HYPERFOAM'])], 
-                       'Density':[QLabel('Density:'), QPlainTextEdit()],
-                       'Young Modulus':[QLabel('Young Modulus:'), QPlainTextEdit()],
-                       'Plasitc Strain':[QLabel('Plasitc Strain:'), QPlainTextEdit()],
-                       #Thermal
-                       'Expansion Coef.':[QLabel('Expansion Coef.:'), QPlainTextEdit()],
-                       'Ref. Temp.':[QLabel('Ref. Temp.:'), QPlainTextEdit()],
-                       'Expansion Type':[QLabel('Expansion Type:'), CreateComboBox(['ISO', 'ORHTO', 'ANISO'])],
-                       'Conductivity':[QLabel('Conductivity'), QPlainTextEdit()],
-                       'Specific Heat':[QLabel('Specific Heat:'), QPlainTextEdit()]}
-        super().__init__()
-        self.writer = writer
-        self.setWindowTitle(writer.text())
-        self.setGeometry(100, 100, 400, 300)
-
-        self.llayout = QGridLayout(self)
-        for i, field in enumerate(self.fields.values()):
-            for j, widget in enumerate(field):
-                self.llayout.addWidget(widget, i, j)
-
-
-        self.ok_button = QPushButton("Ok", self)
-        self.ok_button.clicked.connect(self.save_text)
-
-        self.cancel_button = QPushButton("Cancel", self)
-        self.cancel_button.clicked.connect(self.close)
-
-        lastRow:int = self.llayout.rowCount()
-        self.llayout.addWidget(self.cancel_button, lastRow, 0)
-        self.llayout.addWidget(self.ok_button, lastRow, 1)
-
-        self.ttype:QComboBox = self.fields['Type'][1]
-        self.hardening:QComboBox = self.fields['Hardening'][1]
-        self.hyper:QComboBox = self.fields['Hyperelastic model'][1]
-        self.ttype.currentTextChanged.connect(self.updateFields)
-        self.hardening.currentTextChanged.connect(self.updateFields)
-        self.hyper.currentTextChanged.connect(self.updateFields)
-
-        self.updateFields()
-
-    def updateFields(self):
-        self.hardening.setEnabled(False)
-        self.hyper.setEnabled(False)
-        if self.ttype.currentText() == 'PLASTIC':
-            self.hardening.setEnabled(True)
-        elif self.ttype.currentText() == 'HYPERELASTIC':
-            self.hyper.setEnabled(True)
-
-    def save_text(self):
-        textArr:list = []
-        for item_key in self.fields.keys():
-            textArr.append(getTextFromDialog(self.fields, item_key))
-        #self.writer.set_text(text)
-
-class TextEditor(QDialog):
-    def __init__(self, writer:'CcxWriter'):
-        super().__init__()
-        self.writer = writer
-        self.setWindowTitle(writer.text())
-        self.setGeometry(100, 100, 400, 300)
-
-        self.llayout = QVBoxLayout(self)
-
-        self.text_edit = QTextEdit(self)
-        self.text_edit.setPlainText(writer.getStoredText())
-        self.llayout.addWidget(self.text_edit)
-
-        self.save_button = QPushButton("Save", self)
-        self.save_button.clicked.connect(self.save_text)
-        self.llayout.addWidget(self.save_button)
-
-    def save_text(self):
-        text = self.text_edit.toPlainText()
-        self.writer.setStoredText(text)
 
 class Label(QStandardItem):
     def __init__(self, text="Label"):
@@ -167,8 +69,7 @@ class MeshSubWriter(CcxWriter):
     def __init__(self, text="Mesh"):
         super().__init__(text)
         self.setEditable(False)
-        self.setStoredText('''
-*Node
+        self.setStoredText('''*Node
 1, -2.62000000E+001, 5.79483884E+000, -4.82760553E+000
 2, -2.62000000E+001, 1.06948388E+001, -4.82760553E+000
 3, -1.52000000E+001, 5.79483884E+000, -4.82760553E+000
@@ -263,8 +164,7 @@ class StepSubWriter(CcxWriter):
     def __init__(self, text="Step"):
         super().__init__(text)
         self.setEditable(False)
-        self.setStoredText('''
-*Step
+        self.setStoredText('''*Step
 *Static, Solver=Spooles
 *Output, Frequency=1''')
 
