@@ -127,7 +127,8 @@ class MaterialSubWriter(CcxWriter):
 1386000000''')
 
     def doubleClicked(self):
-        self.editor = TextEditor(self)
+        #self.editor = TextEditor(self)
+        self.editor = MaterialDialog(self)
         self.editor.exec()
 
 class SectionSubWriter(CcxWriter):

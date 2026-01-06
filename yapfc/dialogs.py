@@ -4,7 +4,9 @@ from PySide6.QtWidgets import (
     QComboBox, QPushButton, QLabel, QLineEdit, QGridLayout, QComboBox,
     QVBoxLayout, QDialog, QLabel, QPushButton, QPlainTextEdit, QTextEdit
 )
-from yapfc.model import CcxWriter
+from enum import Enum, StrEnum, auto
+
+#from yapfc.model import CcxWriter
 
 def get_option_from_json(json_file:str, option:str) -> str:
         try:
@@ -98,50 +100,95 @@ class OptionsDialog(QDialog):
             pass
 
 
-def CreateComboBox(items: list[str]):
+### Material dialog
+
+def CreateComboBox(items: type[StrEnum]):
     tmpComboBox:QComboBox = QComboBox()
-    tmpComboBox.addItems(items)
+    for i in items:
+        tmpComboBox.addItem(i.name)
     return tmpComboBox
 
-def getTextFromDialog(fields:dict, key:str) -> str:
-    widget: QPlainTextEdit | QComboBox = fields[key][1]
-    if widget.isEnabled:
-        if isinstance(widget, QPlainTextEdit):
-            return widget.toPlainText()
-        elif isinstance(widget, QComboBox):
-            return widget.currentText()
-        else:
-            return 'Object not handled'
-    else:
-        return ''
+def listToText(l: list[str]):
+    text: str = ''
+    for line in l:
+        text += line
+    return text
 
+class AnalisysType(StrEnum):
+    Elastic = '*ELASTIC'
+    ElastoPlastic = '*PLASTIC'
+    Hyperelastic = '*HYPERELASTIC'
+
+class HardeningType(StrEnum):
+    Isotropic = 'ISOTROPIC'
+    Kinematic = 'KINEMATIC'
+
+class HyperelasticType(StrEnum):
+    ArrudaBoyce = 'ARRUDA-BOYCE'
+    MooneyRivlin = 'MOONEY-RIVLIN'
+    NeoHooke = 'NEO HOOKE'
+    Ogden = 'OGDEN'
+    Polynomial = 'POLYNOMIAL'
+    ReducedPolynomial = 'REDUCED POLYNOMIAL'
+    Yeoh = 'YEOH'
+    Hyperfoam = 'HYPERFOAM'
+
+class ExpansionType(StrEnum):
+    Iso = 'ISO'
+    Ortho = 'ORTHO'
+    Aniso = 'ANISO'
+
+class ComboDialogElement:
+    def __init__(self, label: str, comboboxEnum: type[StrEnum], elemntsList: list):
+        self.label: QLabel = QLabel(label)
+        self.elemntEnum = comboboxEnum
+        self.widget: QComboBox = CreateComboBox(comboboxEnum)
+        elemntsList.append(self)
+
+    def getValue(self) -> str:
+        return self.elemntEnum[self.widget.currentText()]
+
+class TextDialogElement:
+    def __init__(self, label: str, elemntsList: list):
+        self.label: QLabel = QLabel(label)
+        self.widget: QPlainTextEdit = QPlainTextEdit()
+        elemntsList.append(self)
+
+    def getValue(self) -> str:
+        return self.widget.toPlainText()
 
 class MaterialDialog(QDialog):
-    def __init__(self, writer: CcxWriter):
-        self.fields:dict = {
-                       #Mechanical
-                       'Type':[QLabel('Type:'), CreateComboBox(['Elastic', 'Elasto-Plastic', 'Hyperelastic'])],
-                       'Hardening':[QLabel('Hardening:'), CreateComboBox(['ISOTROPIC', 'KINEMATIC', 'COMBINED'])],
-                       'Hyperelastic model':[QLabel('Hyperelastic model:'), CreateComboBox(['ARRUDA-BOYCE', 'MOONEY-RIVLIN', 'NEO HOOKE', 'OGDEN', 'POLYNOMIAL', 'REDUCED POLYNOMIAL', 'YEOH', 'HYPERFOAM'])], 
-                       'Density':[QLabel('Density:'), QPlainTextEdit()],
-                       'Young Modulus':[QLabel('Young Modulus:'), QPlainTextEdit()],
-                       'Plasitc Strain':[QLabel('Plasitc Strain:'), QPlainTextEdit()],
-                       #Thermal
-                       'Expansion Coef.':[QLabel('Expansion Coef.:'), QPlainTextEdit()],
-                       'Ref. Temp.':[QLabel('Ref. Temp.:'), QPlainTextEdit()],
-                       'Expansion Type':[QLabel('Expansion Type:'), CreateComboBox(['ISO', 'ORHTO', 'ANISO'])],
-                       'Conductivity':[QLabel('Conductivity'), QPlainTextEdit()],
-                       'Specific Heat':[QLabel('Specific Heat:'), QPlainTextEdit()]}
+    def __init__(self, writer: 'CcxWriter'):
+        elementList: list[ComboDialogElement | TextDialogElement] = []
+        self.AnalisysType = ComboDialogElement('Type', AnalisysType, elementList)
+        self.HardeningType = ComboDialogElement('Hardening', HardeningType, elementList)
+        self.HyperelasticType = ComboDialogElement('Hyperelastic Model', HyperelasticType, elementList)
+        self.Desnsity = TextDialogElement('Density', elementList)
+        self.YoungModulus = TextDialogElement('Young Modulus', elementList)
+        self.PlasticStrain = TextDialogElement('Plastic Strain', elementList)
+        self.ExpansionCoef = TextDialogElement('Expansion Coef.', elementList)
+        self.RefTemp = TextDialogElement('Ref. Temp.', elementList)
+        self.ExpansionType = TextDialogElement('Expansion Type', elementList)
+        self.Conductivity = TextDialogElement('Conductivity', elementList)
+        self.SpecificHeat = TextDialogElement('Specific Heat', elementList)
+
+        self.HardeningType.widget.setEnabled(False)
+        self.HyperelasticType.widget.setEnabled(False)
+
+        self.AnalisysType.widget.currentTextChanged.connect(self.updateFields)
+        self.HardeningType.widget.currentTextChanged.connect(self.updateFields)
+        self.HyperelasticType.widget.currentTextChanged.connect(self.updateFields)
+        # TODO add rest
+
         super().__init__()
         self.writer = writer
         self.setWindowTitle(writer.text())
         self.setGeometry(100, 100, 400, 300)
 
         self.llayout = QGridLayout(self)
-        for i, field in enumerate(self.fields.values()):
-            for j, widget in enumerate(field):
-                self.llayout.addWidget(widget, i, j)
-
+        for i, elemnt in enumerate(elementList):
+            self.llayout.addWidget(elemnt.label, i, 0)
+            self.llayout.addWidget(elemnt.widget, i, 1)
 
         self.ok_button = QPushButton("Ok", self)
         self.ok_button.clicked.connect(self.save_text)
@@ -153,31 +200,53 @@ class MaterialDialog(QDialog):
         self.llayout.addWidget(self.cancel_button, lastRow, 0)
         self.llayout.addWidget(self.ok_button, lastRow, 1)
 
-        self.ttype:QComboBox = self.fields['Type'][1]
-        self.hardening:QComboBox = self.fields['Hardening'][1]
-        self.hyper:QComboBox = self.fields['Hyperelastic model'][1]
-        self.ttype.currentTextChanged.connect(self.updateFields)
-        self.hardening.currentTextChanged.connect(self.updateFields)
-        self.hyper.currentTextChanged.connect(self.updateFields)
-
         self.updateFields()
 
     def updateFields(self):
-        self.hardening.setEnabled(False)
-        self.hyper.setEnabled(False)
-        if self.ttype.currentText() == 'PLASTIC':
-            self.hardening.setEnabled(True)
-        elif self.ttype.currentText() == 'HYPERELASTIC':
-            self.hyper.setEnabled(True)
+        if self.AnalisysType.elemntEnum[self.AnalisysType.widget.currentText()] == AnalisysType.ElastoPlastic:
+            self.HardeningType.widget.setEnabled(True)
+        else:
+            self.HardeningType.widget.setEnabled(False)
+        if self.AnalisysType.elemntEnum[self.AnalisysType.widget.currentText()] == AnalisysType.Hyperelastic:
+            self.HyperelasticType.widget.setEnabled(True)
+        else:
+            self.HyperelasticType.widget.setEnabled(False)
 
     def save_text(self):
-        textArr:list = []
-        for item_key in self.fields.keys():
-            textArr.append(getTextFromDialog(self.fields, item_key))
-        #self.writer.set_text(text)
+        textArr: list = []
+        match self.AnalisysType.getValue():
+            case AnalisysType.Elastic:
+                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
+                textArr.append(f'{self.AnalisysType.getValue()}')
+                textArr.append(f', TYPE={self.HardeningType.getValue()}\n')
+                textArr.append(f'{self.YoungModulus.getValue()}\n')
+                textArr.append(f'*DENSITY\n')
+                textArr.append(f'{self.Desnsity.getValue()}\n')
+            case AnalisysType.ElastoPlastic:
+                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
+                textArr.append(f'*ELASTIC\n')
+                textArr.append(f'{self.YoungModulus.getValue()}\n')
+                textArr.append(f'{self.AnalisysType.getValue()}')
+                textArr.append(f', TYPE={self.HardeningType.getValue()}\n')
+                textArr.append(f'{self.PlasticStrain.getValue()}\n')
+                textArr.append(f'*DENSITY\n')
+                textArr.append(f'{self.Desnsity.getValue()}\n')
+            case AnalisysType.Hyperelastic:
+                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
+                textArr.append(f'{self.AnalisysType.getValue()}')
+                textArr.append(f', {self.HyperelasticType.getValue()}\n')
+                textArr.append(f'{self.PlasticStrain.getValue()}\n')
+                textArr.append(f'*DENSITY\n')
+                textArr.append(f'{self.Desnsity.getValue()}\n')
+
+
+        self.writer.setStoredText(listToText(textArr))
+        print(listToText(textArr))
+
+### Raw text editor
 
 class TextEditor(QDialog):
-    def __init__(self, writer: CcxWriter):
+    def __init__(self, writer: 'CcxWriter'):
         super().__init__()
         self.writer = writer
         self.setWindowTitle(writer.text())
