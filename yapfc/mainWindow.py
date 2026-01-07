@@ -204,29 +204,40 @@ class MainWindow(QMainWindow):
         match selected_item.getTextLabel():
             case "Meshes":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Materials":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Sections":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Contacts":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Initial Conditions":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Steps":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Analyses":
                 menu.addAction(addItem)
+                menu.addAction(openTextEdit)
             case "Mesh":
                 menu.addAction(removeItem)
+                menu.addAction(openTextEdit)
             case "Material":
                 menu.addAction(removeItem)
                 menu.addAction(openTextEdit)
             case "Section":
                 menu.addAction(removeItem)
+                menu.addAction(openTextEdit)
             case "Contact":
                 menu.addAction(removeItem)
+                menu.addAction(openTextEdit)
             case "Initial Condition":
                 menu.addAction(removeItem)
+                menu.addAction(openTextEdit)
             case "Step":
                 menu.addAction(addBoundary)
                 menu.addAction(removeItem)
@@ -274,11 +285,15 @@ class MainWindow(QMainWindow):
             new_item = BoundarySubWriter(text)
             parent_item.appendRow(new_item)
 
-    def removeItem(self, item):
+    def removeItem(self, item: CcxWriter):
         if item.parent():
             item.parent().removeRow(item.row())
         else:
             self.model.removeRow(item.row())
+        try:
+            item.removeWriter()
+        except:
+            print(f'Unable to remove this writter - {item.getTextLabel()}')
 
     def openTextEdit(self, item: CcxWriter):
         item.openTextEditor()

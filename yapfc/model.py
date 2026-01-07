@@ -2,7 +2,8 @@ from PySide6.QtGui import QStandardItem
 from copy import copy, deepcopy
 from typing import Callable, TypeVar, ParamSpec
 from functools import wraps
-from yapfc.dialogs import TextEditor, MaterialDialog
+from yapfc.dialogs import TextEditor, MaterialDialog, SectionDialog, CCXWriterCategory
+from enum import Enum, auto
 
 
 T = TypeVar("T")
@@ -40,8 +41,10 @@ class Label(QStandardItem):
         return ''
 
 class CcxWriter(QStandardItem):
-    def __init__(self, text="CcxWriter", dialog: None | type[MaterialDialog]=None):
+    writters: list['CcxWriter'] = []
+    def __init__(self, text="CcxWriter", dialog: None | type[MaterialDialog | SectionDialog]=None):
         super().__init__(text)
+        type(self).writters.append(self)
         self.setEditable(False)
         self._stored_text = ""
         self._className = str(type(self)).split(".")[-1].split("Sub")[0]
@@ -61,6 +64,9 @@ class CcxWriter(QStandardItem):
     def openTextEditor(self) -> None:
         self._editor.exec()
 
+    def removeWriter(self) -> None:
+        type(self).writters.remove(self)
+
     # Setters
     def setStoredText(self, newText:str) -> None:
         self._stored_text = newText
@@ -73,6 +79,19 @@ class CcxWriter(QStandardItem):
     @refOnDemand
     def getTextLabel(self) -> str:
         return self._textLabel
+    
+    @refOnDemand
+    @classmethod
+    def getWritersList(cls) -> list['CcxWriter']:
+        return cls.writters
+    
+    @classmethod
+    def getWritersListByCategory(cls, cat: CCXWriterCategory) -> list['CcxWriter']:
+        result: list[CcxWriter] = []
+        for i in cls.writters:
+            if i.__class__.__name__ == cat.name:
+                result.append(i)
+        return result
 
 class MeshSubWriter(CcxWriter):
     def __init__(self, text="Mesh"):
@@ -136,9 +155,14 @@ class MaterialSubWriter(CcxWriter):
 1386000000''')
 class SectionSubWriter(CcxWriter):
     def __init__(self, text="Sections"):
-        super().__init__(text)
+        super().__init__(text, dialog=SectionDialog)
         self.setEditable(False)
         self.setStoredText('''*Solid section, Elset=Internal_Selection-1_Solid_Section-1, Material=ABS''')
+    
+    def doubleClicked(self) -> None:
+        if self.dialog:
+            self.dialog.updateFields()
+        return super().doubleClicked()
 
 class ConstraintSubWriter(CcxWriter):
     def __init__(self, text="Constraints"):
