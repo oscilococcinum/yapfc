@@ -40,17 +40,26 @@ class Label(QStandardItem):
         return ''
 
 class CcxWriter(QStandardItem):
-    def __init__(self, text="CcxWriter"):
+    def __init__(self, text="CcxWriter", dialog: None | type[MaterialDialog]=None):
         super().__init__(text)
         self.setEditable(False)
         self._stored_text = ""
         self._className = str(type(self)).split(".")[-1].split("Sub")[0]
         self._textLabel = self._className
+        self._editor = TextEditor(self)
+        if dialog:
+            self.dialog = dialog(self)
+        else:
+            self.dialog = None
 
     # Actions
     def doubleClicked(self) -> None:
-        self.editor = TextEditor(self)
-        self.editor.exec()
+        if self.dialog != None:
+            self.dialog.exec()
+        else:
+            pass
+    def openTextEditor(self) -> None:
+        self._editor.exec()
 
     # Setters
     def setStoredText(self, newText:str) -> None:
@@ -112,7 +121,7 @@ Internal-1_Internal_Selection-1_Surface_Traction-1_S2, S2''')
 
 class MaterialSubWriter(CcxWriter):
     def __init__(self, text="Materials"):
-        super().__init__(text)
+        super().__init__(text, dialog=MaterialDialog)
         self.setEditable(False)
         self.setStoredText('''*Material, Name=ABS
 *Density
@@ -125,12 +134,6 @@ class MaterialSubWriter(CcxWriter):
 0.2256
 *Specific heat
 1386000000''')
-
-    def doubleClicked(self):
-        #self.editor = TextEditor(self)
-        self.editor = MaterialDialog(self)
-        self.editor.exec()
-
 class SectionSubWriter(CcxWriter):
     def __init__(self, text="Sections"):
         super().__init__(text)

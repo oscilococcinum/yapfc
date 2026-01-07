@@ -197,6 +197,7 @@ class MainWindow(QMainWindow):
         addItem = QAction(f"Add {selected_item_class}", self)
         addBoundary = QAction(f"Add {selected_item_class}", self)
         removeItem = QAction(f"Remove {selected_item_class}", self)
+        openTextEdit = QAction(f"Text edit {selected_item_class}", self)
         runAnalysis = QAction("Run Analysis", self)
         showResults = QAction("Show Results", self)
 
@@ -219,6 +220,7 @@ class MainWindow(QMainWindow):
                 menu.addAction(removeItem)
             case "Material":
                 menu.addAction(removeItem)
+                menu.addAction(openTextEdit)
             case "Section":
                 menu.addAction(removeItem)
             case "Contact":
@@ -236,6 +238,7 @@ class MainWindow(QMainWindow):
         addItem.triggered.connect(lambda: self.addItem(selected_item))
         addBoundary.triggered.connect(lambda: self.addBoundary(selected_item))
         removeItem.triggered.connect(lambda: self.removeItem(selected_item))
+        openTextEdit.triggered.connect(lambda: self.openTextEdit(selected_item))
         runAnalysis.triggered.connect(lambda: self.runAnalysis())
         showResults.triggered.connect(lambda: self.show_results())
 
@@ -276,6 +279,9 @@ class MainWindow(QMainWindow):
             item.parent().removeRow(item.row())
         else:
             self.model.removeRow(item.row())
+
+    def openTextEdit(self, item: CcxWriter):
+        item.openTextEditor()
 
     def runAnalysis(self):
         indexes = self.tree_view.selectedIndexes()

@@ -101,7 +101,6 @@ class OptionsDialog(QDialog):
 
 
 ### Material dialog
-
 def CreateComboBox(items: type[StrEnum]):
     tmpComboBox:QComboBox = QComboBox()
     for i in items:
@@ -148,6 +147,12 @@ class ComboDialogElement:
     def getValue(self) -> str:
         return self.elemntEnum[self.widget.currentText()]
 
+    def getActiveEnum(self) -> StrEnum:
+        return self.elemntEnum[self.widget.currentText()]
+
+    def setValue(self, val: StrEnum):
+        self.widget.setCurrentText(val.name)
+
 class TextDialogElement:
     def __init__(self, label: str, elemntsList: list):
         self.label: QLabel = QLabel(label)
@@ -157,18 +162,22 @@ class TextDialogElement:
     def getValue(self) -> str:
         return self.widget.toPlainText()
 
+    def setValue(self, val: str) -> None:
+        self.widget.setPlainText(val)
+
 class MaterialDialog(QDialog):
     def __init__(self, writer: 'CcxWriter'):
-        elementList: list[ComboDialogElement | TextDialogElement] = []
+        self.elementList: list[ComboDialogElement | TextDialogElement] = []
+        elementList = self.elementList
         self.AnalisysType = ComboDialogElement('Type', AnalisysType, elementList)
         self.HardeningType = ComboDialogElement('Hardening', HardeningType, elementList)
+        self.ExpansionType = ComboDialogElement('Elastic Expansion Type', ExpansionType, elementList)
         self.HyperelasticType = ComboDialogElement('Hyperelastic Model', HyperelasticType, elementList)
         self.Desnsity = TextDialogElement('Density', elementList)
-        self.YoungModulus = TextDialogElement('Young Modulus', elementList)
-        self.PlasticStrain = TextDialogElement('Plastic Strain', elementList)
+        self.YoungModulus = TextDialogElement('Young Modulus\nOrtho, Aniso Coef.', elementList)
+        self.PlasticStrain = TextDialogElement('Plastic Strain\nHyperelastic Coef.', elementList)
         self.ExpansionCoef = TextDialogElement('Expansion Coef.', elementList)
         self.RefTemp = TextDialogElement('Ref. Temp.', elementList)
-        self.ExpansionType = TextDialogElement('Expansion Type', elementList)
         self.Conductivity = TextDialogElement('Conductivity', elementList)
         self.SpecificHeat = TextDialogElement('Specific Heat', elementList)
 
@@ -178,7 +187,7 @@ class MaterialDialog(QDialog):
         self.AnalisysType.widget.currentTextChanged.connect(self.updateFields)
         self.HardeningType.widget.currentTextChanged.connect(self.updateFields)
         self.HyperelasticType.widget.currentTextChanged.connect(self.updateFields)
-        # TODO add rest
+        self.ExpansionType.widget.currentTextChanged.connect(self.updateFields)
 
         super().__init__()
         self.writer = writer
@@ -201,50 +210,163 @@ class MaterialDialog(QDialog):
         self.llayout.addWidget(self.ok_button, lastRow, 1)
 
         self.updateFields()
+        self.setupTestvalues()
+
+    def setupTestvalues(self):
+        [i.setValue(j) for i,j  in zip(self.elementList,[AnalisysType.ElastoPlastic,
+                                                         HardeningType.Kinematic,
+                                                         ExpansionType.Iso,
+                                                         HyperelasticType.ArrudaBoyce,
+                                                         '1.02e-9',
+                                                         '2000, 0.394',
+                                                         '40, 0.2',
+                                                         '7.4e-5',
+                                                         '20',
+                                                         '0.2256',
+                                                         '1386000000'])]
 
     def updateFields(self):
-        if self.AnalisysType.elemntEnum[self.AnalisysType.widget.currentText()] == AnalisysType.ElastoPlastic:
-            self.HardeningType.widget.setEnabled(True)
-        else:
-            self.HardeningType.widget.setEnabled(False)
-        if self.AnalisysType.elemntEnum[self.AnalisysType.widget.currentText()] == AnalisysType.Hyperelastic:
-            self.HyperelasticType.widget.setEnabled(True)
-        else:
-            self.HyperelasticType.widget.setEnabled(False)
+        enabled: list[TextDialogElement | ComboDialogElement] = []
+
+        if self.AnalisysType.getActiveEnum() == AnalisysType.Elastic:
+            enabled = [self.AnalisysType,
+                       #self.HardeningType,
+                       self.ExpansionType,
+                       #self.HyperelasticType,
+                       self.Desnsity,
+                       self.YoungModulus,
+                       #self.PlasticStrain,
+                       self.ExpansionCoef,
+                       self.RefTemp, 
+                       self.Conductivity,
+                       self.SpecificHeat]
+        if self.AnalisysType.getActiveEnum() == AnalisysType.ElastoPlastic:
+            enabled = [self.AnalisysType,
+                       self.HardeningType,
+                       self.ExpansionType,
+                       #self.HyperelasticType,
+                       self.Desnsity,
+                       self.YoungModulus,
+                       self.PlasticStrain,
+                       self.ExpansionCoef,
+                       self.RefTemp, 
+                       self.Conductivity,
+                       self.SpecificHeat]
+        if self.AnalisysType.getActiveEnum() == AnalisysType.Hyperelastic:
+            enabled = [self.AnalisysType,
+                       #self.HardeningType,
+                       #self.ExpansionType,
+                       self.HyperelasticType,
+                       self.Desnsity,
+                       #self.YoungModulus,
+                       self.PlasticStrain,
+                       self.ExpansionCoef,
+                       self.RefTemp,
+                       self.Conductivity,
+                       self.SpecificHeat]
+
+        disabled: set[TextDialogElement | ComboDialogElement] = set(self.elementList) - set(enabled)
+        [i.widget.setEnabled(True) for i in enabled]
+        [i.widget.setEnabled(False) for i in disabled]
+
+        match self.AnalisysType.getActiveEnum():
+            case AnalisysType.Elastic | AnalisysType.ElastoPlastic:
+                if self.AnalisysType.getActiveEnum() == AnalisysType.ElastoPlastic:
+                    self.PlasticStrain.widget.setPlaceholderText('σVM, εeq, <temp>')
+                    self.PlasticStrain.widget.update()
+                match self.ExpansionType.getActiveEnum():
+                    case ExpansionType.Iso:
+                        self.YoungModulus.widget.setPlaceholderText('Y, ν, <temp>')
+                        self.YoungModulus.widget.update()
+                    case ExpansionType.Ortho:
+                        self.YoungModulus.widget.setPlaceholderText('D1111, D1122, D2222, D1133, D2233, D3333, D1212, D1313\nD2323, <temp>')
+                        self.YoungModulus.widget.update()
+                    case ExpansionType.Aniso:
+                        self.YoungModulus.widget.setPlaceholderText('D1111, D1122, D2222, D1133, D2233, D3333, D1112, D2212\nD3312, D1212, D1113, D2213, D3313, D1213, D1313, D1123\nD2223, D3323, D1223, D1323, D2323, <temp>')
+                        self.YoungModulus.widget.update()
+            case AnalisysType.Hyperelastic:
+                match self.HyperelasticType.getActiveEnum():
+                    case HyperelasticType.ArrudaBoyce:
+                        self.PlasticStrain.widget.setPlaceholderText('μ, λm, D, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.MooneyRivlin:
+                        self.PlasticStrain.widget.setPlaceholderText('C10, C01, D1, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.NeoHooke:
+                        self.PlasticStrain.widget.setPlaceholderText('C10, D1, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.Ogden:
+                        self.PlasticStrain.widget.setPlaceholderText('μ1, α1, D1, <temp>')
+                        self.PlasticStrain.widget.update()
+                        #TODO add odgen n=2 and so on
+                    case HyperelasticType.Polynomial:
+                        self.PlasticStrain.widget.setPlaceholderText('C10, C01, D1, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.ReducedPolynomial:
+                        self.PlasticStrain.widget.setPlaceholderText('C10, D1, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.Yeoh:
+                        self.PlasticStrain.widget.setPlaceholderText('C10, C20, C30, D1, D2, D3, <temp>')
+                        self.PlasticStrain.widget.update()
+                    case HyperelasticType.Hyperfoam:
+                        self.PlasticStrain.widget.setPlaceholderText('μ1, α1, ν1, <temp>')
+                        self.PlasticStrain.widget.update()
 
     def save_text(self):
         textArr: list = []
         match self.AnalisysType.getValue():
             case AnalisysType.Elastic:
-                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
-                textArr.append(f'{self.AnalisysType.getValue()}')
-                textArr.append(f', TYPE={self.HardeningType.getValue()}\n')
-                textArr.append(f'{self.YoungModulus.getValue()}\n')
+                textArr.append(f'*MATERIAL, NAME={self.writer.text()}\n')
                 textArr.append(f'*DENSITY\n')
                 textArr.append(f'{self.Desnsity.getValue()}\n')
+                textArr.append(f'{self.AnalisysType.getValue()}')
+                textArr.append(f', TYPE={self.ExpansionType.getValue()}\n')
+                textArr.append(f'{self.YoungModulus.getValue()}\n')
+                textArr.append(f'*EXPANSION, ZERO={self.RefTemp.getValue()}\n')
+                textArr.append(f'{self.ExpansionCoef.getValue()}\n')
+                textArr.append(f'*CONDUCTIVITY\n')
+                textArr.append(f'{self.Conductivity.getValue()}\n')
+                textArr.append(f'*SPECIFIC HEAT\n')
+                textArr.append(f'{self.SpecificHeat.getValue()}\n')
             case AnalisysType.ElastoPlastic:
-                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
-                textArr.append(f'*ELASTIC\n')
-                textArr.append(f'{self.YoungModulus.getValue()}\n')
-                textArr.append(f'{self.AnalisysType.getValue()}')
-                textArr.append(f', TYPE={self.HardeningType.getValue()}\n')
-                textArr.append(f'{self.PlasticStrain.getValue()}\n')
+                textArr.append(f'*MATERIAL, NAME={self.writer.text()}\n')
                 textArr.append(f'*DENSITY\n')
                 textArr.append(f'{self.Desnsity.getValue()}\n')
+                textArr.append(f'*ELASTIC')
+                textArr.append(f', TYPE={self.ExpansionType.getValue()}\n')
+                textArr.append(f'{self.YoungModulus.getValue()}\n')
+                textArr.append(f'{self.AnalisysType.getValue()}')
+                textArr.append(f', HARDENING={self.HardeningType.getValue()}\n')
+                textArr.append(f'{self.PlasticStrain.getValue()}\n')
+                textArr.append(f'*EXPANSION, ZERO={self.RefTemp.getValue()}\n')
+                textArr.append(f'{self.ExpansionCoef.getValue()}\n')
+                textArr.append(f'*CONDUCTIVITY\n')
+                textArr.append(f'{self.Conductivity.getValue()}\n')
+                textArr.append(f'*SPECIFIC HEAT\n')
+                textArr.append(f'{self.SpecificHeat.getValue()}\n')
             case AnalisysType.Hyperelastic:
-                textArr.append(f'*MATERIAL, NAME={self.writer.getTextLabel()}\n')
+                textArr.append(f'*MATERIAL, NAME={self.writer.text()}\n')
+                textArr.append(f'*DENSITY\n')
+                textArr.append(f'{self.Desnsity.getValue()}\n')
                 textArr.append(f'{self.AnalisysType.getValue()}')
                 textArr.append(f', {self.HyperelasticType.getValue()}\n')
                 textArr.append(f'{self.PlasticStrain.getValue()}\n')
-                textArr.append(f'*DENSITY\n')
-                textArr.append(f'{self.Desnsity.getValue()}\n')
-
+                textArr.append(f'*EXPANSION, ZERO={self.RefTemp.getValue()}\n')
+                textArr.append(f'{self.ExpansionCoef.getValue()}\n')
+                textArr.append(f'*CONDUCTIVITY\n')
+                textArr.append(f'{self.Conductivity.getValue()}\n')
+                textArr.append(f'*SPECIFIC HEAT\n')
+                textArr.append(f'{self.SpecificHeat.getValue()}\n')
 
         self.writer.setStoredText(listToText(textArr))
         print(listToText(textArr))
 
-### Raw text editor
+    def loadDialogFromText(self) -> None:
+        stream: str = self.writer.getStoredText()
+        #TODO implement loading dialog from ccx text 
 
+
+### Raw text editor
 class TextEditor(QDialog):
     def __init__(self, writer: 'CcxWriter'):
         super().__init__()
@@ -255,7 +377,6 @@ class TextEditor(QDialog):
         self.llayout = QVBoxLayout(self)
 
         self.text_edit = QTextEdit(self)
-        self.text_edit.setPlainText(writer.getStoredText())
         self.llayout.addWidget(self.text_edit)
 
         self.save_button = QPushButton("Save", self)
@@ -265,6 +386,10 @@ class TextEditor(QDialog):
     def save_text(self):
         text = self.text_edit.toPlainText()
         self.writer.setStoredText(text)
+
+    def exec(self) -> int:
+        self.text_edit.setPlainText(self.writer.getStoredText())
+        return super().exec()
 
 
 if __name__ == "__main__":
