@@ -79,6 +79,7 @@ class MainWindow(QMainWindow):
         self.file_menu = self.menu_bar.addMenu("File")
         self.open_action = QAction("Open", self)
         self.open_action.triggered.connect(lambda: self.central_widget.AddActor(self.open_mesh()))
+        self.open_action.triggered.connect(lambda: self.central_widget.ResetCamera())
         self.save_action = QAction("Save", self)
         self.exit_action = QAction("Exit", self)
         self.exit_action.triggered.connect(self.close)
@@ -331,7 +332,7 @@ class MainWindow(QMainWindow):
 class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
     def __init__(self, parent:'vtkViewer'):
         self.AddObserver('LeftButtonPressEvent', self.left_button_press_event) #type:ignore
-        self.parent = parent
+        self.parent: vtkViewer = parent
         self.selected_mapper = vtkDataSetMapper()
         self.selected_actor = vtkActor()
 
@@ -364,9 +365,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if cellId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Cell id is: {cellId}')
-            self.parent.appendSelection(cellId, SelectionFilter.Elements)
+            self.parent.changeInSelection(cellId, SelectionFilter.Elements)
         else:
-            self.parent.clearSelection(SelectionFilter.Elements)
+            self.parent.changeInSelection(cellId, SelectionFilter.Elements)
             print('Selection clean')
     
     def nodePick(self) -> None:
@@ -375,7 +376,7 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         picker = vtkCellPicker()
         picker.SetTolerance(0.0005)
 
-        picker.Pick(pos[0], pos[1], 0, self.GetDefaultRenderer())
+        picker.Pick(pos[0], pos[1], 0, self.parent.renderer)
 
         world_position = picker.GetPickPosition()
 
@@ -384,9 +385,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if pointId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Point id is: {pointId}')
-            self.parent.appendSelection(pointId, SelectionFilter.Nodes)
+            self.parent.changeInSelection(pointId, SelectionFilter.Nodes)
         else:
-            self.parent.clearSelection(SelectionFilter.Nodes)
+            self.parent.changeInSelection(pointId, SelectionFilter.Nodes)
             print('Selection clean')
 
     def edgePick(self) -> None:
@@ -414,6 +415,7 @@ class vtkViewer(QWidget):
         self.edgeSelection:list = []
         self.surfaceSelection:list = []
         self.volumeSelection:list = []
+        self.selectionCreatedActors: dict[int, vtkActor] = {}
 
         # Set background color of the renderer
         self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
@@ -480,16 +482,13 @@ class vtkViewer(QWidget):
         self.camera = self.renderer.GetActiveCamera()
         self.camera.ParallelProjectionOn()
 
-    def AddActor(self, pvtkActor):
-        if self.ShowEdges:
+    def AddActor(self, pvtkActor, edgeVisible: bool = True):
+        if self.ShowEdges and edgeVisible:
             pvtkActor.GetProperty().EdgeVisibilityOn()
-
         self.renderer.AddActor(pvtkActor)
-        self.ResetCamera()
 
     def RemoveActor(self, pvtkActor):
         self.renderer.RemoveActor(pvtkActor)
-        self.ResetCamera()
 
     def GetAllActors(self) -> list[vtkActor]:
         """Return a list of all vtkActors currently in the renderer."""
@@ -545,93 +544,71 @@ class vtkViewer(QWidget):
             case _:
                 return self.nodeSelection
 
-    def appendSelection(self, idx:int, selectionType:SelectionFilter) -> None:
+    def changeInSelection(self, idx:int, selectionType:SelectionFilter) -> None:
         match selectionType:
             case SelectionFilter.Elements:
                 sel:list[int] = self.cellSelection
-                if idx not in sel:
-                    sel.append(idx)
-                    self.highlightSelection(selectionType)
-                else:
-                    print('No change in cell selection')
+                try:
+                    if idx not in sel:
+                        sel.append(idx)
+                        mesh = self.pparent.mesh.getMesh()
+                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+                        colors.SetTuple3(idx, 255, 0, 0)
+                        mesh.GetCellData().SetScalars(colors)
+                        mesh.GetCellData().SetActiveScalars('CellColors')
+                        print(f'Node {idx} is selected')
+                    elif idx in sel:
+                        mesh = self.pparent.mesh.getMesh()
+                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+                        colors.SetTuple3(idx, 255, 255, 255)
+                        mesh.GetCellData().SetScalars(colors)
+                        mesh.GetCellData().SetActiveScalars('CellColors')
+                        print(f'Element {idx} is no longer selected')
+                except:
+                    for i in sel:
+                        mesh = self.pparent.mesh.getMesh()
+                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+                        colors.SetTuple3(i, 255, 255, 255)
+                        mesh.GetCellData().SetScalars(colors)
+                        mesh.GetCellData().SetActiveScalars('CellColors')
+                    print('All nodes removed from selection')
             case SelectionFilter.Nodes:
                 sel:list[int] = self.nodeSelection
-                if idx not in sel:
-                    sel.append(idx)
-                    self.highlightSelection(selectionType)
-                else:
-                    print('No change in selection')
+                actSel: dict[int, vtkActor] = self.selectionCreatedActors
+                try:
+                    if idx not in sel:
+                        sel.append(idx)
+                        mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData= self.pparent.mesh.getMesh()
+                        point_coords = mesh.GetPoint(idx)
+                        sphere_source = vtk.vtkSphereSource()
+                        sphere_source.SetCenter(point_coords)
+                        sphere_source.SetRadius(0.2)  # Adjust radius as needed
+                        sphere_source.Update()
+                        sphere_mapper = vtk.vtkPolyDataMapper()
+                        sphere_mapper.SetInputConnection(sphere_source.GetOutputPort())
+                        sphere_actor = vtk.vtkActor()
+                        sphere_actor.PickableOff()
+                        sphere_actor.SetMapper(sphere_mapper)
+                        sphere_actor.GetProperty().SetColor(1, 0, 0)  # Red color for visibility
+                        self.AddActor(sphere_actor, edgeVisible=False)
+                        actSel[idx] = sphere_actor
+                        print(f'Node {idx} is selected')
+                    elif idx in sel:
+                        sel.remove(idx)
+                        self.RemoveActor(actSel[idx])
+                        actSel.pop(idx)
+                        print(f'Node {idx} is no longer selected')
+                except:
+                    for i in actSel.keys():
+                        self.RemoveActor(actSel[i])
+                    actSel.clear()
+                    sel.clear()
+                    print('All nodes removed from selection')
             case SelectionFilter.Edges:
-                sel:list[int] = self.edgeSelection
-                if idx not in sel:
-                    sel.append(idx)
-                    self.highlightSelection(selectionType)
-                else:
-                    print('No change in selection')
+                pass
             case SelectionFilter.Surfaces:
-                sel:list[int] = self.surfaceSelection
-                if idx not in sel:
-                    sel.append(idx)
-                    self.highlightSelection(selectionType)
-                else:
-                    print('No change in selection')
+                pass
             case SelectionFilter.Volumes:
-                sel:list[int] = self.volumeSelection
-                if idx not in sel:
-                    sel.append(idx)
-                    self.highlightSelection(selectionType)
-                else:
-                    print('No change in selection')
-
-    def clearSelection(self, selectionType:SelectionFilter) -> None:
-        selection:list[int] = self.getSelection(selectionType)
-        match selectionType:
-            case SelectionFilter.Nodes:
-                pass
-            case SelectionFilter.Edges:
-                pass
-            case SelectionFilter.Elements:
-                try:
-                    mesh = self.pparent.mesh.getMesh()
-                    colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-                
-                    for i in selection:
-                        colors.SetTuple3(i, 255, 255, 255)
-                        print(colors.GetTuple3(i))
-                
-                    mesh.GetCellData().SetScalars(colors)
-                    mesh.GetCellData().SetActiveScalars('CellColors')
-                    selection.clear()
-                except:
-                    print('Clear of selection unsuccesfull')
-            case SelectionFilter.Surfaces:
-                pass
-            case Selection.Volumes:
-                pass
-
-    def highlightSelection(self, selectionType:SelectionFilter) -> None:
-        selection:list[int] = self.getSelection(selectionType)
-        match selectionType:
-            case SelectionFilter.Nodes:
-                pass
-            case SelectionFilter.Edges:
-                pass
-            case SelectionFilter.Elements:
-                try:
-                    mesh = self.pparent.mesh.getMesh()
-                    colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-
-                    for i in selection:
-                        colors.SetTuple3(i, 255, 0, 0)
-                        print(colors.GetTuple3(i))
-
-                    mesh.GetCellData().SetScalars(colors)
-                    mesh.GetCellData().SetActiveScalars('CellColors')
-                except:
-                    print('Highlight unsuccesfull')
-            case SelectionFilter.Surfaces:
-                pass
-            case Selection.Volumes:
                 pass
 
     def setSelectionFilter(self, filter:int) -> None:
