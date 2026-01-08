@@ -170,19 +170,24 @@ class TextDialogElement:
 
 class MaterialDialog(QDialog):
     def __init__(self, writer: 'CcxWriter'):
+        super().__init__()
+        self.writer = writer
+        self.setWindowTitle(writer.text())
+        self.setGeometry(100, 100, 400, 300)
+        self.llayout = QGridLayout(self)
         self.elementList: list[ComboDialogElement | TextDialogElement] = []
-        elementList = self.elementList
-        self.AnalisysType = ComboDialogElement('Type', AnalisysType, elementList)
-        self.HardeningType = ComboDialogElement('Hardening', HardeningType, elementList)
-        self.ExpansionType = ComboDialogElement('Elastic Expansion Type', ExpansionType, elementList)
-        self.HyperelasticType = ComboDialogElement('Hyperelastic Model', HyperelasticType, elementList)
-        self.Desnsity = TextDialogElement('Density', elementList)
-        self.YoungModulus = TextDialogElement('Young Modulus\nOrtho, Aniso Coef.', elementList)
-        self.PlasticStrain = TextDialogElement('Plastic Strain\nHyperelastic Coef.', elementList)
-        self.ExpansionCoef = TextDialogElement('Expansion Coef.', elementList)
-        self.RefTemp = TextDialogElement('Ref. Temp.', elementList)
-        self.Conductivity = TextDialogElement('Conductivity', elementList)
-        self.SpecificHeat = TextDialogElement('Specific Heat', elementList)
+
+        self.AnalisysType = ComboDialogElement('Type', AnalisysType, self.elementList)
+        self.HardeningType = ComboDialogElement('Hardening', HardeningType, self.elementList)
+        self.ExpansionType = ComboDialogElement('Elastic Expansion Type', ExpansionType, self.elementList)
+        self.HyperelasticType = ComboDialogElement('Hyperelastic Model', HyperelasticType, self.elementList)
+        self.Desnsity = TextDialogElement('Density', self.elementList)
+        self.YoungModulus = TextDialogElement('Young Modulus\nOrtho, Aniso Coef.', self.elementList)
+        self.PlasticStrain = TextDialogElement('Plastic Strain\nHyperelastic Coef.', self.elementList)
+        self.ExpansionCoef = TextDialogElement('Expansion Coef.', self.elementList)
+        self.RefTemp = TextDialogElement('Ref. Temp.', self.elementList)
+        self.Conductivity = TextDialogElement('Conductivity', self.elementList)
+        self.SpecificHeat = TextDialogElement('Specific Heat', self.elementList)
 
         self.HardeningType.widget.setEnabled(False)
         self.HyperelasticType.widget.setEnabled(False)
@@ -192,26 +197,7 @@ class MaterialDialog(QDialog):
         self.HyperelasticType.widget.currentTextChanged.connect(self.updateFields)
         self.ExpansionType.widget.currentTextChanged.connect(self.updateFields)
 
-        super().__init__()
-        self.writer = writer
-        self.setWindowTitle(writer.text())
-        self.setGeometry(100, 100, 400, 300)
-
-        self.llayout = QGridLayout(self)
-        for i, elemnt in enumerate(elementList):
-            self.llayout.addWidget(elemnt.label, i, 0)
-            self.llayout.addWidget(elemnt.widget, i, 1)
-
-        self.ok_button = QPushButton("Ok", self)
-        self.ok_button.clicked.connect(self.save_text)
-
-        self.cancel_button = QPushButton("Cancel", self)
-        self.cancel_button.clicked.connect(self.close)
-
-        lastRow:int = self.llayout.rowCount()
-        self.llayout.addWidget(self.cancel_button, lastRow, 0)
-        self.llayout.addWidget(self.ok_button, lastRow, 1)
-
+        self.SetupGui(self.llayout, self.elementList)
         self.updateFields()
         self.setupTestvalues()
 
@@ -227,6 +213,21 @@ class MaterialDialog(QDialog):
                                                          '20',
                                                          '0.2256',
                                                          '1386000000'])]
+
+    def SetupGui(self, llayout, elementList: list) -> None:
+        for i, elemnt in enumerate(elementList):
+            self.llayout.addWidget(elemnt.label, i, 0)
+            self.llayout.addWidget(elemnt.widget, i, 1)
+
+        self.ok_button = QPushButton("Ok", self)
+        self.ok_button.clicked.connect(self.save_text)
+
+        self.cancel_button = QPushButton("Cancel", self)
+        self.cancel_button.clicked.connect(self.close)
+
+        lastRow:int = self.llayout.rowCount()
+        llayout.addWidget(self.cancel_button, lastRow, 0)
+        llayout.addWidget(self.ok_button, lastRow, 1)
 
     def updateFields(self):
         enabled: list[TextDialogElement | ComboDialogElement] = []
@@ -405,18 +406,24 @@ class ComboDynamicElement:
 
 class SectionDialog(QDialog):
     def __init__(self, writer: 'CcxWriter'):
+        super().__init__()
+        self.writer = writer
+        self.setWindowTitle(writer.text())
+        self.setGeometry(100, 100, 400, 300)
+        self.llayout = QGridLayout(self)
         self.elementList: list[ComboDynamicElement] = []
 
         self.SelectionSet = ComboDynamicElement('Selection set:', [], self.elementList)
         self.Material = ComboDynamicElement('Material:', [], self.elementList)
 
-        super().__init__()
-        self.writer = writer
-        self.setWindowTitle(writer.text())
-        self.setGeometry(100, 100, 400, 300)
+        self.SetupGui(self.llayout, self.elementList)
+        self.updateFields()
 
-        self.llayout = QGridLayout(self)
-        for i, elemnt in enumerate(self.elementList):
+    def setupTestvalues(self):
+        pass
+
+    def SetupGui(self, llayout, elementList: list) -> None:
+        for i, elemnt in enumerate(elementList):
             self.llayout.addWidget(elemnt.label, i, 0)
             self.llayout.addWidget(elemnt.widget, i, 1)
 
@@ -427,13 +434,8 @@ class SectionDialog(QDialog):
         self.cancel_button.clicked.connect(self.close)
 
         lastRow:int = self.llayout.rowCount()
-        self.llayout.addWidget(self.cancel_button, lastRow, 0)
-        self.llayout.addWidget(self.ok_button, lastRow, 1)
-
-        self.updateFields()
-
-    def setupTestvalues(self):
-        pass
+        llayout.addWidget(self.cancel_button, lastRow, 0)
+        llayout.addWidget(self.ok_button, lastRow, 1)
 
     def updateFields(self):
         materials = self.writer.getWritersListByCategory(CCXWriterCategory.MaterialSubWriter)
