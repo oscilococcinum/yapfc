@@ -5,8 +5,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QDialog, QLabel, QPushButton, QPlainTextEdit, QTextEdit
 )
 from enum import Enum, StrEnum, auto
+from typing import TYPE_CHECKING
 
-#from yapfc.model import CcxWriter
+if TYPE_CHECKING:
+    from yapfc.model import CcxWriter
 
 
 def get_option_from_json(json_file:str, option:str) -> str:
