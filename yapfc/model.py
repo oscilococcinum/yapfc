@@ -1,28 +1,5 @@
 from PySide6.QtGui import QStandardItem
-from copy import copy, deepcopy
-from typing import Callable, TypeVar, ParamSpec
-from functools import wraps
 from yapfc.dialogs import TextEditor, MaterialDialog, SectionDialog, CCXWriterCategory
-from enum import Enum, auto
-
-
-T = TypeVar("T")
-P = ParamSpec("P")
-
-def refOnDemand(fn: Callable[P, T]) -> Callable[P, T]:
-    @wraps(fn)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        want_copy = kwargs.pop("ref", True)
-        deep = kwargs.pop("deepCopyRef", True)
-
-        result = fn(*args, **kwargs)
-        if not want_copy:
-            return result
-
-        return deepcopy(result) if deep else copy(result)
-
-    return wrapper
-
 
 class Label(QStandardItem):
     def __init__(self, text="Label"):
@@ -31,12 +8,10 @@ class Label(QStandardItem):
         self.setEditable(False)
 
     # Getters
-    @refOnDemand
     def getTextLabel(self):
         return self._textLabel
 
     # Virtual
-    @refOnDemand
     def getStoredText(self) -> str:
         return ''
 
@@ -72,15 +47,12 @@ class CcxWriter(QStandardItem):
         self._stored_text = newText
 
     # Getters
-    @refOnDemand
     def getStoredText(self) -> str:
-        return copy(self._stored_text)
+        return self._stored_text
     
-    @refOnDemand
     def getTextLabel(self) -> str:
         return self._textLabel
     
-    @refOnDemand
     @classmethod
     def getWritersList(cls) -> list['CcxWriter']:
         return cls.writters
