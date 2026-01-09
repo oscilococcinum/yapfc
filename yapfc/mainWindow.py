@@ -369,12 +369,12 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         else:
             self.parent.changeInSelection(cellId, SelectionFilter.Elements)
             print('Selection clean')
-    
+
     def nodePick(self) -> None:
         pos = self.GetInteractor().GetEventPosition()
 
-        picker = vtkCellPicker()
-        picker.SetTolerance(0.0005)
+        picker = vtkPointPicker()
+        picker.SetTolerance(0.005)
 
         picker.Pick(pos[0], pos[1], 0, self.parent.renderer)
 
@@ -548,7 +548,7 @@ class vtkViewer(QWidget):
         match selectionType:
             case SelectionFilter.Elements:
                 sel:list[int] = self.cellSelection
-                try:
+                if idx != -1:
                     if idx not in sel:
                         sel.append(idx)
                         mesh = self.pparent.mesh.getMesh()
@@ -564,7 +564,7 @@ class vtkViewer(QWidget):
                         mesh.GetCellData().SetScalars(colors)
                         mesh.GetCellData().SetActiveScalars('CellColors')
                         print(f'Element {idx} is no longer selected')
-                except:
+                else:
                     for i in sel:
                         mesh = self.pparent.mesh.getMesh()
                         colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
@@ -575,7 +575,7 @@ class vtkViewer(QWidget):
             case SelectionFilter.Nodes:
                 sel:list[int] = self.nodeSelection
                 actSel: dict[int, vtkActor] = self.selectionCreatedActors
-                try:
+                if idx != -1:
                     if idx not in sel:
                         sel.append(idx)
                         mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData= self.pparent.mesh.getMesh()
@@ -598,7 +598,7 @@ class vtkViewer(QWidget):
                         self.RemoveActor(actSel[idx])
                         actSel.pop(idx)
                         print(f'Node {idx} is no longer selected')
-                except:
+                else:
                     for i in actSel.keys():
                         self.RemoveActor(actSel[i])
                     actSel.clear()
