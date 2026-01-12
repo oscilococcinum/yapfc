@@ -1,5 +1,8 @@
 from PySide6.QtGui import QStandardItem
-from yapfc.dialogs import TextEditor, MaterialDialog, SectionDialog, CCXWriterCategory
+from yapfc.TextEditor import TextEditor
+from yapfc.MaterialDialog import MaterialDialog
+from yapfc.SectionDialog import SectionDialog
+from yapfc.CCXWriterCategory import CCXWriterCategory
 
 class Label(QStandardItem):
     def __init__(self, text="Label"):

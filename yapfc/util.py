@@ -1,4 +1,6 @@
+import json
 import subprocess
+
 
 def save_inp_file(inp_text, inp_name) -> None:
     with open(f"{inp_name}.inp", 'w') as file:
@@ -28,3 +30,16 @@ def open_paraview(paraview_path, result_file_path: str) -> None:
     except Exception as e:
         print("Error launching ParaView:", str(e))
 
+def listToText(l: list[str]):
+    text: str = ''
+    for line in l:
+        text += line
+    return text
+
+def getFieldFromJson(json_file:str, field:str) -> str:
+        try:
+            with open(f"{json_file}", "r") as f:
+                options = json.load(f)
+                return options.get(f"{field}", "")
+        except:
+            raise FileNotFoundError

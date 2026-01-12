@@ -1,6 +1,10 @@
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QVBoxLayout, QDockWidget, QTreeView, QMenu, QInputDialog, QFileDialog, QWidget
+from PySide6.QtWidgets import (
+    QMainWindow, QStatusBar, QVBoxLayout, 
+    QDockWidget, QTreeView, QMenu, 
+    QInputDialog, QFileDialog, QWidget
+)
 from PySide6.QtGui import  QAction, QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt, QPoint, QObject, QModelIndex
+from PySide6.QtCore import Qt, QPoint, QModelIndex
 from yapfc.model import (
     CcxWriter, MeshSubWriter, MaterialSubWriter,
     SectionSubWriter, ConstraintSubWriter, ContactSubWriter,
@@ -11,35 +15,19 @@ import vtk
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
-    vtkActor,
-    vtkCellPicker,
-    vtkPointPicker,
-    vtkPicker,
-    vtkDataSetMapper,
+    vtkActor, vtkCellPicker, vtkPointPicker,
+    vtkDataSetMapper
 )
-from typing import Any, cast, List
-from enum import Enum, auto
-import numpy as np
-from yapfc.mesh import Mesh
-from yapfc.runner import run_script, save_inp_file, open_paraview
-from yapfc.dialogs import OptionsDialog, get_option_from_json
+from typing import Any
+from enum import Enum
+from yapfc.Mesh import Mesh
+from yapfc.OptionsDialog import OptionsDialog
+from yapfc.SelectionCategory import SelectionCategory
+from yapfc.util import run_script, save_inp_file, open_paraview
+from yapfc.util import getFieldFromJson
 
 class Tools(Enum):
     Options = 0
-
-class Selection(Enum):
-    Elements = 0
-    Nodes = 1
-    Edges = 2
-    Surfaces = 3
-    Volumes = 4
-
-class SelectionFilter(Enum):
-    Elements = 0
-    Nodes = 1
-    Edges = 2
-    Surfaces = 3
-    Volumes = 4
 
 def isInsOrSubclsIns(obj:Any, cls:type) -> bool:
     if isinstance(obj, cls) or issubclass(type(obj), cls):
@@ -117,8 +105,8 @@ class MainWindow(QMainWindow):
 
         # Selection
         self.selection_menu = self.menu_bar.addMenu("Selection")
-        self.selection_menu.addActions([QAction(item.name, self) for item in Selection])
-        [item.triggered.connect(lambda _, idx=index: self.central_widget.setSelectionFilter(Selection(idx).value)) for index, item in enumerate(self.selection_menu.actions())]
+        self.selection_menu.addActions([QAction(item.name, self) for item in SelectionCategory])
+        [item.triggered.connect(lambda _, idx=index: self.central_widget.setSelectionCategory(SelectionCategory(idx).value)) for index, item in enumerate(self.selection_menu.actions())]
 
         # Tools
         self.tools_menu = self.menu_bar.addMenu("Tools")
@@ -318,13 +306,13 @@ class MainWindow(QMainWindow):
             print(inp_text)
 
             save_inp_file(inp_text, selected_item.text())
-            run_script(get_option_from_json("options.json", "ccx_path"), selected_item.text())
+            run_script(getFieldFromJson("options.json", "ccx_path"), selected_item.text())
     
     def show_results(self) -> None:
         indexes = self.tree_view.selectedIndexes()
         if indexes:
             selected_item = self.model.itemFromIndex(indexes[0])
-            open_paraview(get_option_from_json("options.json", "paraview_path"), f"{selected_item.text()}.exo")
+            open_paraview(getFieldFromJson("options.json", "paraview_path"), f"{selected_item.text()}.exo")
     
     def open_options_dialog(self) -> None:
         self.options.exec()
@@ -338,15 +326,15 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
 
     def left_button_press_event(self, obj, event):
         match self.parent.selectionFilter:
-            case SelectionFilter.Elements:
+            case SelectionCategory.Elements:
                 self.pickCell()
-            case SelectionFilter.Nodes:
+            case SelectionCategory.Nodes:
                 self.nodePick()
-            case SelectionFilter.Edges:
+            case SelectionCategory.Edges:
                 self.edgePick()
-            case SelectionFilter.Surfaces:
+            case SelectionCategory.Surfaces:
                self.surfacePick() 
-            case SelectionFilter.Volumes:
+            case SelectionCategory.Volumes:
                 self.volumePick()
         self.OnLeftButtonDown()
 
@@ -365,9 +353,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if cellId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Cell id is: {cellId}')
-            self.parent.changeInSelection(cellId, SelectionFilter.Elements)
+            self.parent.changeInSelection(cellId, SelectionCategory.Elements)
         else:
-            self.parent.changeInSelection(cellId, SelectionFilter.Elements)
+            self.parent.changeInSelection(cellId, SelectionCategory.Elements)
             print('Selection clean')
 
     def nodePick(self) -> None:
@@ -385,9 +373,9 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
         if pointId != -1:
             print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
             print(f'Point id is: {pointId}')
-            self.parent.changeInSelection(pointId, SelectionFilter.Nodes)
+            self.parent.changeInSelection(pointId, SelectionCategory.Nodes)
         else:
-            self.parent.changeInSelection(pointId, SelectionFilter.Nodes)
+            self.parent.changeInSelection(pointId, SelectionCategory.Nodes)
             print('Selection clean')
 
     def edgePick(self) -> None:
@@ -409,7 +397,7 @@ class vtkViewer(QWidget):
         self.TrihedronPos = 1
         '''1 = Lower Left , 2 = Lower Right'''
         self.ShowEdges = True
-        self.selectionFilter:SelectionFilter = SelectionFilter(1)
+        self.selectionFilter:SelectionCategory = SelectionCategory(1)
         self.cellSelection:list = []
         self.nodeSelection:list = []
         self.edgeSelection:list = []
@@ -529,24 +517,24 @@ class vtkViewer(QWidget):
 
         self.UpdateView()
 
-    def getSelection(self, filter:SelectionFilter) -> list[int]:
+    def getSelection(self, filter:SelectionCategory) -> list[int]:
         match filter:
-            case SelectionFilter.Nodes:
+            case SelectionCategory.Nodes:
                 return self.nodeSelection
-            case SelectionFilter.Edges:
+            case SelectionCategory.Edges:
                 return self.edgeSelection
-            case SelectionFilter.Elements:
+            case SelectionCategory.Elements:
                 return self.cellSelection
-            case SelectionFilter.Surfaces:
+            case SelectionCategory.Surfaces:
                 return self.surfaceSelection
-            case SelectionFilter.Volumes:
+            case SelectionCategory.Volumes:
                 return self.volumeSelection
             case _:
                 return self.nodeSelection
 
-    def changeInSelection(self, idx:int, selectionType:SelectionFilter) -> None:
+    def changeInSelection(self, idx:int, selectionType:SelectionCategory) -> None:
         match selectionType:
-            case SelectionFilter.Elements:
+            case SelectionCategory.Elements:
                 sel:list[int] = self.cellSelection
                 if idx != -1:
                     if idx not in sel:
@@ -572,7 +560,7 @@ class vtkViewer(QWidget):
                         mesh.GetCellData().SetScalars(colors)
                         mesh.GetCellData().SetActiveScalars('CellColors')
                     print('All nodes removed from selection')
-            case SelectionFilter.Nodes:
+            case SelectionCategory.Nodes:
                 sel:list[int] = self.nodeSelection
                 actSel: dict[int, vtkActor] = self.selectionCreatedActors
                 if idx != -1:
@@ -604,13 +592,13 @@ class vtkViewer(QWidget):
                     actSel.clear()
                     sel.clear()
                     print('All nodes removed from selection')
-            case SelectionFilter.Edges:
+            case SelectionCategory.Edges:
                 pass
-            case SelectionFilter.Surfaces:
+            case SelectionCategory.Surfaces:
                 pass
-            case SelectionFilter.Volumes:
+            case SelectionCategory.Volumes:
                 pass
 
-    def setSelectionFilter(self, filter:int) -> None:
-        self.selectionFilter = SelectionFilter(filter)
+    def setSelectionCategory(self, filter:int) -> None:
+        self.selectionFilter = SelectionCategory(filter)
         print(f'Filter changed to {self.selectionFilter}')

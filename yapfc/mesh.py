@@ -1,6 +1,5 @@
 import vtk
 import meshio
-from copy import copy, deepcopy
 
 
 class Mesh():
