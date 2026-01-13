@@ -171,3 +171,4 @@ cython_debug/
 *.frd
 *.out
 *.exo
+test.*

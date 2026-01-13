@@ -16,18 +16,36 @@ import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
     vtkActor, vtkCellPicker, vtkPointPicker,
-    vtkDataSetMapper
+    vtkDataSetMapper, vtkAreaPicker
 )
 from typing import Any
 from enum import Enum
 from yapfc.Mesh import Mesh
 from yapfc.OptionsDialog import OptionsDialog
 from yapfc.SelectionCategory import SelectionCategory
-from yapfc.util import run_script, save_inp_file, open_paraview
-from yapfc.util import getFieldFromJson
+from yapfc.util import run_script, save_inp_file, open_paraview, getFieldFromJson, timeit
 
 class Tools(Enum):
     Options = 0
+
+
+def compute_cell_normals(poly):
+    """Ensure the polydata has per-cell normals in CellData['Normals']."""
+    normals = poly.GetCellData().GetNormals()
+    if normals is not None:
+        return poly  # already has cell normals
+
+    nfilter = vtk.vtkPolyDataNormals()
+    nfilter.SetInputData(poly)
+    nfilter.ComputePointNormalsOff()
+    nfilter.ComputeCellNormalsOn()
+    nfilter.SplittingOff()  # keep planar faces coherent
+    nfilter.ConsistencyOn()
+    nfilter.AutoOrientNormalsOn()
+    nfilter.Update()
+    out = nfilter.GetOutput()
+    return out
+
 
 def isInsOrSubclsIns(obj:Any, cls:type) -> bool:
     if isinstance(obj, cls) or issubclass(type(obj), cls):
@@ -338,13 +356,14 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
                 self.volumePick()
         self.OnLeftButtonDown()
 
+    @timeit
     def pickCell(self) -> None:
         pos = self.GetInteractor().GetEventPosition()
 
         picker = vtkCellPicker()
-        picker.SetTolerance(0.0005)
+        picker.SetTolerance(0.005)
 
-        picker.Pick(pos[0], pos[1], 0, self.GetDefaultRenderer())
+        picker.Pick(pos[0], pos[1], 0, self.parent.renderer)
 
         world_position = picker.GetPickPosition()
 
@@ -358,6 +377,7 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
             self.parent.changeInSelection(cellId, SelectionCategory.Elements)
             print('Selection clean')
 
+    @timeit
     def nodePick(self) -> None:
         pos = self.GetInteractor().GetEventPosition()
 
@@ -398,11 +418,11 @@ class vtkViewer(QWidget):
         '''1 = Lower Left , 2 = Lower Right'''
         self.ShowEdges = True
         self.selectionFilter:SelectionCategory = SelectionCategory(1)
-        self.cellSelection:list = []
-        self.nodeSelection:list = []
-        self.edgeSelection:list = []
-        self.surfaceSelection:list = []
-        self.volumeSelection:list = []
+        self.cellSelection: dict[int, tuple[float]] = {}
+        self.nodeSelection: list[int] = []
+        self.edgeSelection: list[int] = []
+        self.surfaceSelection: list[int] = []
+        self.volumeSelection: list[int] = []
         self.selectionCreatedActors: dict[int, vtkActor] = {}
 
         # Set background color of the renderer
@@ -524,7 +544,7 @@ class vtkViewer(QWidget):
             case SelectionCategory.Edges:
                 return self.edgeSelection
             case SelectionCategory.Elements:
-                return self.cellSelection
+                return list(self.cellSelection.keys())
             case SelectionCategory.Surfaces:
                 return self.surfaceSelection
             case SelectionCategory.Volumes:
@@ -533,32 +553,31 @@ class vtkViewer(QWidget):
                 return self.nodeSelection
 
     def changeInSelection(self, idx:int, selectionType:SelectionCategory) -> None:
+        mesh = self.pparent.mesh.getMesh()
+        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
         match selectionType:
             case SelectionCategory.Elements:
-                sel:list[int] = self.cellSelection
+                elSel: dict[int, tuple] = self.cellSelection
                 if idx != -1:
-                    if idx not in sel:
-                        sel.append(idx)
-                        mesh = self.pparent.mesh.getMesh()
-                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+                    if idx not in elSel.keys():
+                        color = colors.GetTuple3(idx)
+                        elSel[idx] = color
                         colors.SetTuple3(idx, 255, 0, 0)
                         mesh.GetCellData().SetScalars(colors)
                         mesh.GetCellData().SetActiveScalars('CellColors')
                         print(f'Node {idx} is selected')
-                    elif idx in sel:
-                        mesh = self.pparent.mesh.getMesh()
-                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-                        colors.SetTuple3(idx, 255, 255, 255)
+                    elif idx in elSel:
+                        colors.SetTuple3(idx, *elSel[idx])
                         mesh.GetCellData().SetScalars(colors)
                         mesh.GetCellData().SetActiveScalars('CellColors')
+                        elSel.pop(idx)
                         print(f'Element {idx} is no longer selected')
                 else:
-                    for i in sel:
-                        mesh = self.pparent.mesh.getMesh()
-                        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-                        colors.SetTuple3(i, 255, 255, 255)
-                        mesh.GetCellData().SetScalars(colors)
-                        mesh.GetCellData().SetActiveScalars('CellColors')
+                    for i, v in zip(elSel.keys(), elSel.values()):
+                        colors.SetTuple3(i, *v)
+                    mesh.GetCellData().SetScalars(colors)
+                    mesh.GetCellData().SetActiveScalars('CellColors')
+                    elSel.clear()
                     print('All nodes removed from selection')
             case SelectionCategory.Nodes:
                 sel:list[int] = self.nodeSelection
@@ -566,7 +585,6 @@ class vtkViewer(QWidget):
                 if idx != -1:
                     if idx not in sel:
                         sel.append(idx)
-                        mesh: vtk.vtkUnstructuredGrid | vtk.vtkPolyData= self.pparent.mesh.getMesh()
                         point_coords = mesh.GetPoint(idx)
                         sphere_source = vtk.vtkSphereSource()
                         sphere_source.SetCenter(point_coords)
@@ -587,10 +605,10 @@ class vtkViewer(QWidget):
                         actSel.pop(idx)
                         print(f'Node {idx} is no longer selected')
                 else:
+                    sel.clear()
                     for i in actSel.keys():
                         self.RemoveActor(actSel[i])
                     actSel.clear()
-                    sel.clear()
                     print('All nodes removed from selection')
             case SelectionCategory.Edges:
                 pass
