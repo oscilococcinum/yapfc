@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from enum import StrEnum
 from typing import TYPE_CHECKING
-from yapfc.CCXWriterCategory import CCXWriterCategory
+from yapfc.enums.CCXWriterCategory import CCXWriterCategory
 
 if TYPE_CHECKING:
     from yapfc.model import CcxWriter

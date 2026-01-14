@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QMainWindow, QStatusBar, QVBoxLayout, 
     QDockWidget, QTreeView, QMenu, 
-    QInputDialog, QFileDialog, QWidget
+    QInputDialog, QFileDialog
 )
 from PySide6.QtGui import  QAction, QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QPoint, QModelIndex
@@ -12,21 +12,14 @@ from yapfc.model import (
     Label, AnalysisSubWriter, BoundarySubWriter
 )
 import vtk
-import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
-from vtkmodules.vtkRenderingCore import (
-    vtkActor, vtkCellPicker, vtkPointPicker,
-    vtkDataSetMapper, vtkAreaPicker
-)
 from typing import Any
-from enum import Enum
 from yapfc.Mesh import Mesh
 from yapfc.OptionsDialog import OptionsDialog
-from yapfc.SelectionCategory import SelectionCategory
+from yapfc.enums.SelectionCategory import SelectionCategory
+from yapfc.Viewer import vtkViewer
+from yapfc.enums.ToolsMenu import ToolsMenu
 from yapfc.util import run_script, save_inp_file, open_paraview, getFieldFromJson, timeit
 
-class Tools(Enum):
-    Options = 0
 
 
 def compute_cell_normals(poly):
@@ -128,8 +121,8 @@ class MainWindow(QMainWindow):
 
         # Tools
         self.tools_menu = self.menu_bar.addMenu("Tools")
-        self.tools_menu.addActions([QAction(item.name, self) for item in Tools])
-        self.tools_menu.actions()[Tools.Options.value].triggered.connect(self.open_options_dialog)
+        self.tools_menu.addActions([QAction(item.name, self) for item in ToolsMenu])
+        self.tools_menu.actions()[ToolsMenu.Options.value].triggered.connect(self.open_options_dialog)
 
         # Help
         self.help_menu = self.menu_bar.addMenu("Help")
@@ -325,298 +318,12 @@ class MainWindow(QMainWindow):
 
             save_inp_file(inp_text, selected_item.text())
             run_script(getFieldFromJson("options.json", "ccx_path"), selected_item.text())
-    
+
     def show_results(self) -> None:
         indexes = self.tree_view.selectedIndexes()
         if indexes:
             selected_item = self.model.itemFromIndex(indexes[0])
             open_paraview(getFieldFromJson("options.json", "paraview_path"), f"{selected_item.text()}.exo")
-    
+
     def open_options_dialog(self) -> None:
         self.options.exec()
-
-class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
-    def __init__(self, parent:'vtkViewer'):
-        self.AddObserver('LeftButtonPressEvent', self.left_button_press_event) #type:ignore
-        self.parent: vtkViewer = parent
-        self.selected_mapper = vtkDataSetMapper()
-        self.selected_actor = vtkActor()
-
-    def left_button_press_event(self, obj, event):
-        match self.parent.selectionFilter:
-            case SelectionCategory.Elements:
-                self.pickCell()
-            case SelectionCategory.Nodes:
-                self.nodePick()
-            case SelectionCategory.Edges:
-                self.edgePick()
-            case SelectionCategory.Surfaces:
-               self.surfacePick() 
-            case SelectionCategory.Volumes:
-                self.volumePick()
-        self.OnLeftButtonDown()
-
-    @timeit
-    def pickCell(self) -> None:
-        pos = self.GetInteractor().GetEventPosition()
-
-        picker = vtkCellPicker()
-        picker.SetTolerance(0.005)
-
-        picker.Pick(pos[0], pos[1], 0, self.parent.renderer)
-
-        world_position = picker.GetPickPosition()
-
-        cellId:int = picker.GetCellId()
-
-        if cellId != -1:
-            print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
-            print(f'Cell id is: {cellId}')
-            self.parent.changeInSelection(cellId, SelectionCategory.Elements)
-        else:
-            self.parent.changeInSelection(cellId, SelectionCategory.Elements)
-            print('Selection clean')
-
-    @timeit
-    def nodePick(self) -> None:
-        pos = self.GetInteractor().GetEventPosition()
-
-        picker = vtkPointPicker()
-        picker.SetTolerance(0.005)
-
-        picker.Pick(pos[0], pos[1], 0, self.parent.renderer)
-
-        world_position = picker.GetPickPosition()
-
-        pointId:int = picker.GetPointId()
-
-        if pointId != -1:
-            print(f'''Pick position is: ({world_position[0]:.6g}, {world_position[1]:.6g}, {world_position[2]:.6g})''')
-            print(f'Point id is: {pointId}')
-            self.parent.changeInSelection(pointId, SelectionCategory.Nodes)
-        else:
-            self.parent.changeInSelection(pointId, SelectionCategory.Nodes)
-            print('Selection clean')
-
-    def edgePick(self) -> None:
-        pass
-
-    def surfacePick(self) -> None:
-        pass
-
-    def volumePick(self) -> None:
-        pass
-
-class vtkViewer(QWidget):
-    def __init__(self, parent:MainWindow):
-        super().__init__()
-        self.pparent = parent
-        # vtk initialization
-        self.QVTKRenderWindowInteractor = QVTK.QVTKRenderWindowInteractor
-        self.renderer = vtk.vtkRenderer()
-        self.TrihedronPos = 1
-        '''1 = Lower Left , 2 = Lower Right'''
-        self.ShowEdges = True
-        self.selectionFilter:SelectionCategory = SelectionCategory(1)
-        self.cellSelection: dict[int, tuple[float]] = {}
-        self.nodeSelection: list[int] = []
-        self.edgeSelection: list[int] = []
-        self.surfaceSelection: list[int] = []
-        self.volumeSelection: list[int] = []
-        self.selectionCreatedActors: dict[int, vtkActor] = {}
-
-        # Set background color of the renderer
-        self.renderer.SetBackground(0.2, 0.3, 0.4)  # RGB color
-        self.interactor = self.QVTKRenderWindowInteractor(self)
-        self.trackball = MouseInteractorStyle(self)
-        self.trackball.SetDefaultRenderer(self.renderer)
-        self.interactor.SetInteractorStyle(self.trackball)
-        self.interactor.GetRenderWindow().AddRenderer(self.renderer)
-        self.interactor.GetRenderWindow().PointSmoothingOn()
-        self.interactor.GetRenderWindow().LineSmoothingOn()
-        self.interactor.Initialize()
-        self.interactor.Start()
-
-        #Setup Trihedron
-        self.Trihedron = self.MakeAxesActor()
-        self.om1 = vtk.vtkOrientationMarkerWidget()
-        self.om1.SetOrientationMarker(self.Trihedron)
-        self.om1.SetInteractor(self.interactor)
-        self.om1.EnabledOn()
-        self.om1.InteractiveOff()
-
-    def UpdateView(self):
-        self.interactor.ReInitialize()
-        self.interactor.GetRenderWindow().Render()
-        self.repaint()
-
-    def paintEvent(self, ev):
-        size = self.size()
-        self.interactor.GetRenderWindow().SetSize(size.width(), size.height())
-
-    def MakeAxesActor(self):
-        axes = vtk.vtkAxesActor()
-        axes.SetShaftTypeToCylinder()
-        axes.SetXAxisLabelText('X')
-        axes.SetYAxisLabelText('Y')
-        axes.SetZAxisLabelText('Z')
-        axes.SetTotalLength(1.5, 1.5, 1.5)
-        axes.SetCylinderRadius(0.5 * axes.GetCylinderRadius())
-        axes.SetConeRadius(1.025 * axes.GetConeRadius())
-        axes.SetSphereRadius(1.5 * axes.GetSphereRadius())
-        return axes
-
-    def ResizeTrihedron(self, width, height):
-        if self.Trihedron:
-            if (width == 0):
-                width = 100
-            if (height == 0):
-                height = 100
-
-            if self.TrihedronPos == 1:  # Position lower Left in the viewport.
-                self.om1.SetViewport(0, 0, (200.0 / width), (200.0 / height))
-
-            if self.TrihedronPos == 2:  # Position lower Right in the viewport.
-                self.om1.SetViewport(1 - (200.0 / width),
-                                     0, 1, (200.0 / height))
-
-    def resizeEvent(self, ev):
-        self.interactor.GetRenderWindow().SetSize(self.size().width(),
-                                                  self.size().height())
-        self.ResizeTrihedron(self.size().width(), self.size().height())
-
-    def ResetCamera(self):
-        self.renderer.ResetCamera()
-        self.camera = self.renderer.GetActiveCamera()
-        self.camera.ParallelProjectionOn()
-
-    def AddActor(self, pvtkActor, edgeVisible: bool = True):
-        if self.ShowEdges and edgeVisible:
-            pvtkActor.GetProperty().EdgeVisibilityOn()
-        self.renderer.AddActor(pvtkActor)
-
-    def RemoveActor(self, pvtkActor):
-        self.renderer.RemoveActor(pvtkActor)
-
-    def GetAllActors(self) -> list[vtkActor]:
-        """Return a list of all vtkActors currently in the renderer."""
-        actors = []
-        num_actors = self.renderer.GetActors().GetNumberOfItems()
-        for i in range(num_actors):
-            actor = self.renderer.GetActors().GetItemAsObject(i)
-            actors.append(actor)
-        return actors
-
-    def SetRepresentation(self, aTyp):
-        ''' aTyp = 1 - Points
-            aTyp = 2 - Wireframe
-            aTyp = 3 - Surface
-            aTyp = 4 - Surface with edges
-        '''
-        num_actors = self.renderer.GetActors().GetNumberOfItems()
-        for i in range(num_actors):
-            actor:vtkActor = self.renderer.GetActors().GetItemAsObject(i) #type:ignore
-            if (aTyp == 1):
-                actor.GetProperty().SetRepresentationToPoints()
-                actor.GetProperty().SetPointSize(4.0)
-                self.ShowEdges = False
-
-            if (aTyp == 2):
-                actor.GetProperty().SetRepresentationToWireframe()
-                self.ShowEdges = False
-
-            if (aTyp == 3):
-                actor.GetProperty().SetRepresentationToSurface()
-                actor.GetProperty().EdgeVisibilityOff()
-                self.ShowEdges = False
-
-            if (aTyp == 4):
-                actor.GetProperty().SetRepresentationToSurface()
-                actor.GetProperty().EdgeVisibilityOn()
-                self.ShowEdges = True
-
-        self.UpdateView()
-
-    def getSelection(self, filter:SelectionCategory) -> list[int]:
-        match filter:
-            case SelectionCategory.Nodes:
-                return self.nodeSelection
-            case SelectionCategory.Edges:
-                return self.edgeSelection
-            case SelectionCategory.Elements:
-                return list(self.cellSelection.keys())
-            case SelectionCategory.Surfaces:
-                return self.surfaceSelection
-            case SelectionCategory.Volumes:
-                return self.volumeSelection
-            case _:
-                return self.nodeSelection
-
-    def changeInSelection(self, idx:int, selectionType:SelectionCategory) -> None:
-        mesh = self.pparent.mesh.getMesh()
-        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
-        match selectionType:
-            case SelectionCategory.Elements:
-                elSel: dict[int, tuple] = self.cellSelection
-                if idx != -1:
-                    if idx not in elSel.keys():
-                        color = colors.GetTuple3(idx)
-                        elSel[idx] = color
-                        colors.SetTuple3(idx, 255, 0, 0)
-                        mesh.GetCellData().SetScalars(colors)
-                        mesh.GetCellData().SetActiveScalars('CellColors')
-                        print(f'Node {idx} is selected')
-                    elif idx in elSel:
-                        colors.SetTuple3(idx, *elSel[idx])
-                        mesh.GetCellData().SetScalars(colors)
-                        mesh.GetCellData().SetActiveScalars('CellColors')
-                        elSel.pop(idx)
-                        print(f'Element {idx} is no longer selected')
-                else:
-                    for i, v in zip(elSel.keys(), elSel.values()):
-                        colors.SetTuple3(i, *v)
-                    mesh.GetCellData().SetScalars(colors)
-                    mesh.GetCellData().SetActiveScalars('CellColors')
-                    elSel.clear()
-                    print('All nodes removed from selection')
-            case SelectionCategory.Nodes:
-                sel:list[int] = self.nodeSelection
-                actSel: dict[int, vtkActor] = self.selectionCreatedActors
-                if idx != -1:
-                    if idx not in sel:
-                        sel.append(idx)
-                        point_coords = mesh.GetPoint(idx)
-                        sphere_source = vtk.vtkSphereSource()
-                        sphere_source.SetCenter(point_coords)
-                        sphere_source.SetRadius(0.2)  # Adjust radius as needed
-                        sphere_source.Update()
-                        sphere_mapper = vtk.vtkPolyDataMapper()
-                        sphere_mapper.SetInputConnection(sphere_source.GetOutputPort())
-                        sphere_actor = vtk.vtkActor()
-                        sphere_actor.PickableOff()
-                        sphere_actor.SetMapper(sphere_mapper)
-                        sphere_actor.GetProperty().SetColor(1, 0, 0)  # Red color for visibility
-                        self.AddActor(sphere_actor, edgeVisible=False)
-                        actSel[idx] = sphere_actor
-                        print(f'Node {idx} is selected')
-                    elif idx in sel:
-                        sel.remove(idx)
-                        self.RemoveActor(actSel[idx])
-                        actSel.pop(idx)
-                        print(f'Node {idx} is no longer selected')
-                else:
-                    sel.clear()
-                    for i in actSel.keys():
-                        self.RemoveActor(actSel[i])
-                    actSel.clear()
-                    print('All nodes removed from selection')
-            case SelectionCategory.Edges:
-                pass
-            case SelectionCategory.Surfaces:
-                pass
-            case SelectionCategory.Volumes:
-                pass
-
-    def setSelectionCategory(self, filter:int) -> None:
-        self.selectionFilter = SelectionCategory(filter)
-        print(f'Filter changed to {self.selectionFilter}')

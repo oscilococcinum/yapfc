@@ -1,44 +1,23 @@
+from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QDialog, QComboBox, QPushButton, QLabel, QGridLayout, QComboBox,
     QDialog, QLabel, QPushButton, QPlainTextEdit
 )
+from yapfc.enums.AnalisysType import AnalisysType
+from yapfc.enums.ExpansionType import ExpansionType
+from yapfc.enums.HardeningType import HardeningType
+from yapfc.enums.HyperelasticType import HyperelasticType
 from enum import StrEnum
 from yapfc.util import listToText
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from yapfc.model import CcxWriter
+
 
 def CreateComboBox(items: type[StrEnum]):
     tmpComboBox:QComboBox = QComboBox()
     for i in items:
         tmpComboBox.addItem(i.name)
     return tmpComboBox
-
-
-class AnalisysType(StrEnum):
-    Elastic = '*ELASTIC'
-    ElastoPlastic = '*PLASTIC'
-    Hyperelastic = '*HYPERELASTIC'
-
-class HardeningType(StrEnum):
-    Isotropic = 'ISOTROPIC'
-    Kinematic = 'KINEMATIC'
-
-class HyperelasticType(StrEnum):
-    ArrudaBoyce = 'ARRUDA-BOYCE'
-    MooneyRivlin = 'MOONEY-RIVLIN'
-    NeoHooke = 'NEO HOOKE'
-    Ogden = 'OGDEN'
-    Polynomial = 'POLYNOMIAL'
-    ReducedPolynomial = 'REDUCED POLYNOMIAL'
-    Yeoh = 'YEOH'
-    Hyperfoam = 'HYPERFOAM'
-
-class ExpansionType(StrEnum):
-    Iso = 'ISO'
-    Ortho = 'ORTHO'
-    Aniso = 'ANISO'
 
 class ComboDialogElement:
     def __init__(self, label: str, comboboxEnum: type[StrEnum], elemntsList: list):
