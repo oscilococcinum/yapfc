@@ -155,46 +155,41 @@ class vtkViewer(QWidget):
                 return self.nodeSelection
 
     def changeInSelection(self, idx:int, selectionType:SelectionCategory) -> None:
-        mesh = self.pparent.mesh.getMesh()
-        colors:vtk.vtkUnsignedCharArray = self.pparent.mesh.getMesh().GetCellData().GetScalars('CellColors')
+        try:
+            mesh = self.pparent.mesh
+        except AttributeError as e:
+            print(f'No Mesh is loaded')
+            return
         match selectionType:
             case SelectionCategory.Elements:
                 elSel: dict[int, tuple] = self.cellSelection
                 if idx != -1:
                     if idx not in elSel.keys():
-                        color = colors.GetTuple3(idx)
-                        elSel[idx] = color
-                        colors.SetTuple3(idx, 255, 0, 0)
-                        mesh.GetCellData().SetScalars(colors)
-                        mesh.GetCellData().SetActiveScalars('CellColors')
+                        elSel[idx] = mesh.getCellColor(idx)
+                        mesh.setCellColor(idx, (255, 0, 0))
                         print(f'Element {idx} is selected')
                     elif idx in elSel:
-                        colors.SetTuple3(idx, *elSel[idx])
-                        mesh.GetCellData().SetScalars(colors)
-                        mesh.GetCellData().SetActiveScalars('CellColors')
+                        mesh.setCellColor(idx, *elSel[idx])
                         elSel.pop(idx)
                         print(f'Element {idx} is no longer selected')
                 else:
                     for i, v in zip(elSel.keys(), elSel.values()):
-                        colors.SetTuple3(i, *v)
-                    mesh.GetCellData().SetScalars(colors)
-                    mesh.GetCellData().SetActiveScalars('CellColors')
+                        mesh.setCellColor(i, *v)
                     elSel.clear()
-                    print('All element removed from selection')
+                    print('All elements removed from selection')
             case SelectionCategory.Nodes:
                 sel:list[int] = self.nodeSelection
                 actSel: dict[int, vtk.vtkActor] = self.selectionCreatedActors
                 if idx != -1:
                     if idx not in sel:
                         sel.append(idx)
-                        point_coords = mesh.GetPoint(idx)
                         sphere_source = vtk.vtkSphereSource()
-                        sphere_source.SetCenter(point_coords)
-                        sphere_source.SetRadius(0.2)  # Adjust radius as needed
-                        sphere_source.Update()
-                        sphere_mapper = vtk.vtkPolyDataMapper()
-                        sphere_mapper.SetInputConnection(sphere_source.GetOutputPort())
                         sphere_actor = vtk.vtkActor()
+                        sphere_mapper = vtk.vtkPolyDataMapper()
+                        sphere_source.SetCenter(mesh.getNodeCoords(idx))
+                        sphere_source.SetRadius(0.5)  # Adjust radius as needed
+                        sphere_source.Update()
+                        sphere_mapper.SetInputConnection(sphere_source.GetOutputPort())
                         sphere_actor.PickableOff()
                         sphere_actor.SetMapper(sphere_mapper)
                         sphere_actor.GetProperty().SetColor(1, 0, 0)  # Red color for visibility
