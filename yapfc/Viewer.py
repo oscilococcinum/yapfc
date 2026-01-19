@@ -167,7 +167,7 @@ class vtkViewer(QWidget):
                         colors.SetTuple3(idx, 255, 0, 0)
                         mesh.GetCellData().SetScalars(colors)
                         mesh.GetCellData().SetActiveScalars('CellColors')
-                        print(f'Node {idx} is selected')
+                        print(f'Element {idx} is selected')
                     elif idx in elSel:
                         colors.SetTuple3(idx, *elSel[idx])
                         mesh.GetCellData().SetScalars(colors)
@@ -180,7 +180,7 @@ class vtkViewer(QWidget):
                     mesh.GetCellData().SetScalars(colors)
                     mesh.GetCellData().SetActiveScalars('CellColors')
                     elSel.clear()
-                    print('All nodes removed from selection')
+                    print('All element removed from selection')
             case SelectionCategory.Nodes:
                 sel:list[int] = self.nodeSelection
                 actSel: dict[int, vtk.vtkActor] = self.selectionCreatedActors

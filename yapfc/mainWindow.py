@@ -22,7 +22,7 @@ from yapfc.util import run_script, save_inp_file, open_paraview, getFieldFromJso
 
 
 
-def compute_cell_normals(poly):
+def compute_cell_normals(poly:vtk.vtkPolyData) -> vtk.vtkPolyData:
     """Ensure the polydata has per-cell normals in CellData['Normals']."""
     normals = poly.GetCellData().GetNormals()
     if normals is not None:
@@ -112,7 +112,6 @@ class MainWindow(QMainWindow):
         self.surface_edges_rep = QAction("Surface with edges", self)
         self.surface_edges_rep.triggered.connect(lambda: self.central_widget.SetRepresentation(4))
         self.view_menu.addAction(self.surface_edges_rep)
-
 
         # Selection
         self.selection_menu = self.menu_bar.addMenu("Selection")
