@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QWidget
 import vtkmodules.qt.QVTKRenderWindowInteractor as QVTK
 from yapfc.MouseInteractorStyle import MouseInteractorStyle
 from yapfc.enums.SelectionCategory import SelectionCategory
+from yapfc.util import timeit
 if TYPE_CHECKING:
     from yapfc.MainWindow import MainWindow
 

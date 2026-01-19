@@ -1,12 +1,13 @@
+from typing import TYPE_CHECKING
 from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
 from vtkmodules.vtkRenderingCore import (
     vtkActor, vtkCellPicker, vtkPointPicker,
     vtkDataSetMapper
 )
-from yapfc.Viewer import vtkViewer
 from yapfc.enums.SelectionCategory import SelectionCategory
 from yapfc.util import timeit
-
+if TYPE_CHECKING:
+    from yapfc.Viewer import vtkViewer
 
 class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
     def __init__(self, parent:'vtkViewer'):
@@ -29,7 +30,6 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
                 self.volumePick()
         self.OnLeftButtonDown()
 
-    @timeit
     def pickCell(self) -> None:
         pos = self.GetInteractor().GetEventPosition()
 
@@ -50,7 +50,6 @@ class MouseInteractorStyle(vtkInteractorStyleTrackballCamera):
             self.parent.changeInSelection(cellId, SelectionCategory.Elements)
             print('Selection clean')
 
-    @timeit
     def nodePick(self) -> None:
         pos = self.GetInteractor().GetEventPosition()
 
