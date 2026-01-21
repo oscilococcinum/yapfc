@@ -204,25 +204,18 @@ class MainWindow(QMainWindow):
         match selected_item.getTextLabel():
             case "Meshes":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Materials":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Sections":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Contacts":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Initial Conditions":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Steps":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Analyses":
                 menu.addAction(addItem)
-                menu.addAction(openTextEdit)
             case "Mesh":
                 menu.addAction(removeItem)
                 menu.addAction(openTextEdit)
