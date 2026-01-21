@@ -13,6 +13,7 @@ from yapfc.model import (
 )
 import vtk
 from typing import Any
+import re
 from yapfc.Mesh import Mesh
 from yapfc.OptionsDialog import OptionsDialog
 from yapfc.enums.SelectionCategory import SelectionCategory
@@ -257,6 +258,10 @@ class MainWindow(QMainWindow):
     def open_mesh(self):
         fpath = self.open_file_dialog()
         self.mesh = Mesh(fpath)
+        new_mesh_sub = MeshSubWriter(re.split(r'[\\\/\.]', fpath)[-2])
+        self.meshes.appendRow(new_mesh_sub)
+        nodes, elements = self.mesh.getCCXNodesAndElementsParrarel()
+        new_mesh_sub.setStoredText(f'{nodes}\n{elements}')
         return self.mesh.getActor()
 
     def addItem(self, parent_item):
